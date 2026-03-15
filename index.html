@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinRisk — Faillissementsrisico Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f2f1ed;
+  --card: #ffffff;
+  --border: #dedad2;
+  --accent: #1a1a2e;
+  --gold: #b8963e;
+  --muted: #8a8880;
+  --red: #c62828;
+  --red-light: #ffebee;
+  --green: #2e7d32;
+  --green-light: #e8f5e9;
+  --amber: #e65100;
+  --amber-light: #fff3e0;
+  --sidebar-w: 230px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: 'IBM Plex Sans', sans-serif; background: var(--bg); color: var(--accent); }
+.shell { display: flex; min-height: 100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w);
+  background: var(--accent); color: #fff;
+  position: fixed; top: 0; left: 0; height: 100vh;
+  overflow-y: auto; z-index: 200;
+  display: flex; flex-direction: column;
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+}
+.sidebar-logo { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #fff; padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,.08); flex-shrink: 0; }
+.sidebar-logo span { color: var(--gold); }
+.nav-section { padding: 12px 0 4px; }
+.nav-group-label { font-size: 9px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: rgba(255,255,255,.28); padding: 10px 20px 4px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 20px; font-size: 13px; color: rgba(255,255,255,.6); cursor: pointer; border-left: 2px solid transparent; transition: all .15s; text-decoration: none; }
+.nav-item:hover { color: #fff; background: rgba(255,255,255,.06); }
+.nav-item.active { color: #fff; border-left-color: var(--gold); background: rgba(255,255,255,.08); }
+.nav-item .nav-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+.sidebar-info { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.08); margin-top: auto; }
+.sidebar-info-label { font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.28); margin-bottom: 8px; }
+.zscore-zones { display: flex; flex-direction: column; gap: 5px; }
+.zscore-zone { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.zscore-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.zscore-zone-label { color: rgba(255,255,255,.5); font-size: 10px; }
+.zscore-zone-val { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: rgba(255,255,255,.3); margin-left: auto; }
+
+/* ── MOBILE ── */
+.mobile-header { display: none; position: fixed; top: 0; left: 0; right: 0; height: 52px; background: var(--accent); z-index: 300; align-items: center; padding: 0 16px; gap: 12px; }
+.mobile-logo { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #fff; flex: 1; }
+.mobile-logo span { color: var(--gold); }
+.hamburger { background: none; border: none; cursor: pointer; padding: 4px; color: #fff; font-size: 20px; line-height: 1; }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 190; }
+.sidebar-overlay.open { display: block; }
+
+/* ── MAIN ── */
+.main { flex: 1; margin-left: var(--sidebar-w); padding: 36px 40px 60px; min-width: 0; }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 2px solid var(--accent); padding-bottom: 16px; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
+.page-header h1 { font-size: 18px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.meta-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.meta-pill { font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: var(--accent); color: rgba(255,255,255,.7); padding: 4px 10px; border-radius: 2px; }
+.meta-pill b { color: var(--gold); font-weight: 600; }
+
+/* ── UPLOAD ── */
+.upload-area { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; flex-wrap: wrap; }
+.upload-label { display: inline-flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; padding: 9px 16px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; border-radius: 2px; transition: background .2s; flex-shrink: 0; }
+.upload-label:hover { background: #2c2c4a; }
+input[type="file"] { display: none; }
+#file-name { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+.icon-btn { display: none; align-items: center; gap: 6px; background: transparent; border: 1.5px solid var(--border); color: var(--accent); padding: 8px 14px; font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; border-radius: 2px; transition: all .15s; flex-shrink: 0; }
+.icon-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.icon-btn.visible { display: inline-flex; }
+.icon-btn.pdf-btn { border-color: #b71c1c; color: #b71c1c; }
+.icon-btn.pdf-btn:hover { background: #b71c1c; color: #fff; }
+.icon-btn.excel-btn { border-color: #2e7d32; color: #2e7d32; }
+.icon-btn.excel-btn:hover { background: #2e7d32; color: #fff; }
+
+/* ── SECTIONS ── */
+.section { display: none; }
+.section.active { display: block; }
+.section-title { font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+/* ── Z-SCORE BANNER ── */
+.zscore-banner {
+  display: none; border-radius: 4px; padding: 24px 28px; margin-bottom: 24px;
+  position: relative; overflow: hidden; gap: 28px; flex-wrap: wrap; align-items: stretch;
+}
+.zscore-banner.visible { display: flex; }
+.zscore-banner::before { content:''; position:absolute; inset:0; pointer-events:none; background-image:radial-gradient(rgba(255,255,255,.04) 1px,transparent 1px); background-size:20px 20px; }
+.zscore-banner.zone-veilig { background: #1b3a1e; }
+.zscore-banner.zone-grijs { background: #3a2e10; }
+.zscore-banner.zone-risico { background: #3a1212; }
+
+.zb-score-block { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 120px; }
+.zb-number { font-family: 'IBM Plex Mono', monospace; font-size: 64px; font-weight: 600; line-height: 1; letter-spacing: -.04em; }
+.zb-number .denom { font-size: 18px; opacity: .35; font-weight: 400; }
+.zb-label { font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; margin-top: 6px; }
+.zone-veilig .zb-number, .zone-veilig .zb-label { color: #81c784; }
+.zone-grijs .zb-number, .zone-grijs .zb-label { color: #fff176; }
+.zone-risico .zb-number, .zone-risico .zb-label { color: #ef9a9a; }
+
+.zb-divider { width: 1px; background: rgba(255,255,255,.1); align-self: stretch; flex-shrink: 0; }
+
+.zb-components { flex: 1; display: grid; grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); gap: 10px 16px; align-content: center; min-width: 200px; }
+.zb-comp { display: flex; flex-direction: column; gap: 4px; }
+.zb-comp-label { font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.35); }
+.zb-comp-bar-wrap { display: flex; align-items: center; gap: 6px; }
+.zb-comp-bar-track { flex: 1; height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; overflow: hidden; }
+.zb-comp-bar-fill { height: 100%; border-radius: 2px; transition: width .8s cubic-bezier(.4,0,.2,1); }
+.zb-comp-val { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; color: rgba(255,255,255,.6); min-width: 40px; text-align: right; }
+
+.zb-verdict { display: flex; flex-direction: column; justify-content: center; max-width: 210px; border-left: 1px solid rgba(255,255,255,.1); padding-left: 24px; }
+.zb-verdict-title { font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.28); margin-bottom: 6px; }
+.zb-verdict-text { font-size: 11px; color: rgba(255,255,255,.6); line-height: 1.7; font-weight: 300; }
+
+/* ── Z-SCORE GAUGE (large) ── */
+.zscore-gauge-wrap { margin-bottom: 28px; }
+.zscore-track-outer { position: relative; height: 20px; background: linear-gradient(to right, #c62828 0%, #c62828 24.6%, #f9a825 24.6%, #f9a825 58%, #2e7d32 58%, #2e7d32 100%); border-radius: 3px; overflow: visible; margin-bottom: 6px; }
+.zscore-track-needle { position: absolute; top: -6px; width: 3px; height: 32px; background: var(--accent); border-radius: 2px; transform: translateX(-50%); transition: left .8s cubic-bezier(.4,0,.2,1); box-shadow: 0 0 0 3px rgba(255,255,255,.9); }
+.zscore-zone-labels { display: flex; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+.zscore-zone-labels .z-lbl-veilig { flex: 4.2; color: var(--green); text-align: right; }
+.zscore-zone-labels .z-lbl-grijs { flex: 3.3; color: var(--amber); text-align: center; }
+.zscore-zone-labels .z-lbl-risico { flex: 2.5; color: var(--red); text-align: left; }
+.zscore-zone-ticks { display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+/* ── CTX STRIP ── */
+.ctx-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap: 8px; margin-bottom: 24px; }
+.ctx-card { background: var(--accent); padding: 12px 14px; border-radius: 3px; }
+.ctx-card-label { font-size: 9px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.35); margin-bottom: 4px; }
+.ctx-card-value { font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 600; color: #fff; }
+.ctx-card-value.gold { color: var(--gold); }
+.ctx-card-value.red { color: #ef9a9a; }
+.ctx-card-value.green { color: #81c784; }
+
+/* ── RATIO CARDS ── */
+.ratio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px,1fr)); gap: 14px; margin-bottom: 28px; }
+.ratio-card { background: var(--card); border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: 3px; padding: 18px 16px 14px; transition: box-shadow .2s; position: relative; }
+.ratio-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,.08); }
+.ratio-card-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.ratio-value { font-family: 'IBM Plex Mono', monospace; font-size: 32px; font-weight: 600; color: var(--accent); letter-spacing: -.02em; line-height: 1; min-height: 38px; }
+.ratio-value.pct::after { content: '%'; font-size: 16px; opacity: .4; margin-left: 2px; }
+.ratio-value.eur { font-size: 22px; }
+.ratio-value.x::after { content: '×'; font-size: 16px; opacity: .4; margin-left: 2px; }
+.ratio-value.nb { color: var(--muted); font-size: 18px; }
+
+/* ── GAUGE ── */
+.gauge-wrap { margin: 12px 0 4px; }
+.gauge-track { height: 6px; background: var(--border); border-radius: 3px; position: relative; overflow: visible; }
+.gauge-fill { height: 100%; border-radius: 3px; transition: width .7s cubic-bezier(.4,0,.2,1); width: 0%; }
+.gauge-norm { position: absolute; top: -5px; width: 2px; height: 16px; background: var(--accent); opacity: .2; border-radius: 1px; }
+.gauge-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-top: 3px; }
+
+/* ── INDICATOR ── */
+.indicator { display: flex; align-items: center; gap: 6px; margin: 7px 0 4px; min-height: 16px; }
+.ind-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.ind-label { font-size: 11px; font-weight: 600; }
+.lv-uitstekend .ind-dot { background: #1b5e20; } .lv-uitstekend .ind-label { color: #1b5e20; }
+.lv-goed .ind-dot { background: #2e7d32; } .lv-goed .ind-label { color: #2e7d32; }
+.lv-matig .ind-dot { background: #f9a825; } .lv-matig .ind-label { color: #f9a825; }
+.lv-zwak .ind-dot { background: #e65100; } .lv-zwak .ind-label { color: #e65100; }
+.lv-slecht .ind-dot { background: #c62828; } .lv-slecht .ind-label { color: #c62828; }
+.lv-nb .ind-dot { background: var(--muted); } .lv-nb .ind-label { color: var(--muted); }
+
+/* ── FORMULA ── */
+.ratio-norm { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-top: 6px; }
+.formula-toggle { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); cursor: pointer; background: none; border: none; padding: 0; font-family: 'IBM Plex Sans', sans-serif; }
+.formula-toggle:hover { opacity: .75; }
+.formula-detail { display: none; margin-top: 10px; padding: 10px 12px; background: var(--bg); border-radius: 3px; border-left: 3px solid var(--gold); }
+.formula-detail.open { display: block; }
+.formula-text { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--accent); opacity: .7; line-height: 1.7; }
+.formula-values { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.fv-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fv-label { font-size: 10px; color: var(--muted); font-weight: 300; }
+.fv-val { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; color: var(--accent); }
+.formula-desc { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 6px; font-weight: 300; padding-top: 6px; border-top: 1px solid var(--border); }
+
+/* ── WARNINGS ── */
+.warning-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
+.warning-card { display: flex; gap: 14px; align-items: flex-start; background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 14px 16px; border-left: 3px solid var(--border); }
+.warning-card.sev-kritisch { border-left-color: var(--red); background: var(--red-light); }
+.warning-card.sev-hoog { border-left-color: var(--amber); background: var(--amber-light); }
+.warning-card.sev-positief { border-left-color: var(--green); background: var(--green-light); }
+.warning-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.warning-body { flex: 1; }
+.warning-title { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+.warning-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.warning-tag { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 600; background: rgba(0,0,0,.06); padding: 2px 7px; border-radius: 2px; margin-top: 6px; color: var(--accent); }
+.warning-redenering {
+  margin-top: 12px; padding: 12px 14px;
+  background: rgba(0,0,0,.04); border-radius: 3px;
+  border-left: 2px solid rgba(0,0,0,.12);
+}
+.warning-redenering-title {
+  font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 8px;
+}
+.warning-redenering-steps { display: flex; flex-direction: column; gap: 7px; }
+.warning-step { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; line-height: 1.6; color: var(--accent); }
+.warning-step-num {
+  font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700;
+  background: var(--accent); color: #fff; width: 16px; height: 16px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 2px;
+}
+.warning-step-num.gold { background: var(--gold); }
+.warning-step-num.red { background: var(--red); }
+.warning-step-num.green { background: var(--green); }
+
+/* ── X-COMPONENT TABLE ── */
+.xcomp-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 28px; }
+.xcomp-table th { background: var(--accent); color: rgba(255,255,255,.6); font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; padding: 10px 14px; text-align: left; }
+.xcomp-table tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+.xcomp-table tr:hover { background: #f7f6f2; }
+.xcomp-table td { padding: 11px 14px; vertical-align: middle; }
+.xcomp-table td:last-child { font-family: 'IBM Plex Mono', monospace; font-weight: 600; text-align: right; }
+.xcomp-name { font-weight: 600; }
+.xcomp-code { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--muted); margin-left: 6px; }
+.xcomp-formula { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); }
+.xcomp-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; width: 80px; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.xcomp-bar-fill { height: 100%; border-radius: 2px; }
+.xcomp-weight { font-size: 10px; color: var(--muted); }
+.xcomp-contrib { font-size: 11px; font-family: 'IBM Plex Mono', monospace; }
+.xcomp-total { background: var(--accent) !important; color: #fff; }
+.xcomp-total td { color: #fff !important; padding: 12px 14px; }
+.xcomp-total td:last-child { color: var(--gold) !important; }
+
+/* ── TOAST ── */
+#toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #fff; padding: 10px 20px; border-radius: 3px; font-size: 13px; font-weight: 600; z-index: 999; box-shadow: 0 4px 20px rgba(0,0,0,.2); white-space: nowrap; }
+
+/* ── EXCEL MODAL ── */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal-box { background: #fff; border-radius: 4px; width: 100%; max-width: 1100px; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,.25); overflow: hidden; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: var(--accent); gap: 12px; flex-shrink: 0; }
+.modal-title { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: #fff; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modal-close { background: transparent; border: 1.5px solid rgba(255,255,255,.25); color: #fff; width: 30px; height: 30px; border-radius: 2px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.modal-close:hover { background: rgba(255,255,255,.1); }
+.modal-search { font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 6px 12px; border: none; border-radius: 2px; background: rgba(255,255,255,.12); color: #fff; outline: none; width: 180px; }
+.modal-search::placeholder { color: rgba(255,255,255,.35); }
+.sheet-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg); overflow-x: auto; flex-shrink: 0; }
+.sheet-tab { padding: 8px 18px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all .15s; }
+.sheet-tab:hover { color: var(--accent); }
+.sheet-tab.active { color: var(--accent); border-bottom-color: var(--gold); }
+.modal-table-wrap { overflow: auto; flex: 1; }
+#modal-table { border-collapse: collapse; width: 100%; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+#modal-table thead th { padding: 9px 14px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .06em; position: sticky; top: 0; z-index: 2; border-right: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
+#modal-table thead th:first-child { background: var(--gold); width: 44px; text-align: center; }
+#modal-table tbody tr { border-bottom: 1px solid var(--border); }
+#modal-table tbody tr:hover { background: #f7f6f2; }
+#modal-table tbody tr.row-hidden { display: none; }
+#modal-table tbody td { padding: 7px 14px; color: var(--accent); white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--border); }
+#modal-table tbody td:first-child { text-align: center; color: var(--muted); font-size: 10px; background: #fafaf7; }
+#modal-table tbody td.num { text-align: right; color: #1565c0; }
+.modal-footer { padding: 8px 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; background: var(--bg); flex-shrink: 0; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+.loading { animation: pulse 1s ease-in-out infinite; }
+
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .mobile-header { display: flex; }
+  .main { margin-left: 0; padding: 68px 16px 40px; }
+  .ratio-grid { grid-template-columns: 1fr; }
+  .ctx-strip { grid-template-columns: repeat(2,1fr); }
+  .zb-verdict { display: none; }
+  .zscore-banner { padding: 18px 20px; gap: 16px; }
+  .zb-number { font-size: 48px; }
+  .page-header { flex-direction: column; }
+  .modal-box { max-height: 95vh; }
+  .zb-components { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .ctx-strip { grid-template-columns: 1fr 1fr; }
+  .upload-area { flex-direction: column; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+
+<!-- Mobile header -->
+<div class="mobile-header">
+  <div class="mobile-logo">Fin<span>.</span>Risk</div>
+  <button class="hamburger" onclick="toggleSidebar()">☰</button>
+</div>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<div class="shell">
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-logo">Fin<span>.</span>Risk</div>
+  <div class="nav-section">
+    <div class="nav-group-label">Overzicht</div>
+    <div class="nav-item active" onclick="showSection('overzicht',this)">
+      <span class="nav-icon">◈</span> Dashboard
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-group-label">Risicoanalyse</div>
+    <div class="nav-item" onclick="showSection('zscore',this)">
+      <span class="nav-icon">◇</span> Altman Z'-score
+    </div>
+    <div class="nav-item" onclick="showSection('liquiditeit',this)">
+      <span class="nav-icon">◇</span> Liquiditeitsstress
+    </div>
+    <div class="nav-item" onclick="showSection('solvabiliteit',this)">
+      <span class="nav-icon">◇</span> Solvabiliteitsstress
+    </div>
+    <div class="nav-item" onclick="showSection('winst',this)">
+      <span class="nav-icon">◇</span> Winststabiliteit
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-group-label">Intelligence</div>
+    <div class="nav-item" onclick="showSection('waarschuwingen',this)">
+      <span class="nav-icon">◇</span> Waarschuwingen
+    </div>
+    <div class="nav-item" onclick="showSection('componenten',this)">
+      <span class="nav-icon">◇</span> Z'-componenten
+    </div>
+  </div>
+  <div class="sidebar-info">
+    <div class="sidebar-info-label">Z'-score zones</div>
+    <div class="zscore-zones">
+      <div class="zscore-zone">
+        <div class="zscore-dot" style="background:#2e7d32"></div>
+        <span class="zscore-zone-label">Veilig</span>
+        <span class="zscore-zone-val">&gt; 2.9</span>
+      </div>
+      <div class="zscore-zone">
+        <div class="zscore-dot" style="background:#f9a825"></div>
+        <span class="zscore-zone-label">Grijze zone</span>
+        <span class="zscore-zone-val">1.23 – 2.9</span>
+      </div>
+      <div class="zscore-zone">
+        <div class="zscore-dot" style="background:#c62828"></div>
+        <span class="zscore-zone-label">Hoog risico</span>
+        <span class="zscore-zone-val">&lt; 1.23</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="page-header">
+    <h1>Faillissementsrisico Scanner</h1>
+    <div class="meta-row">
+      <div class="meta-pill">Referentie <b id="meta-jaar">—</b></div>
+      <div class="meta-pill">Omzet <b id="meta-omzet">—</b></div>
+      <div class="meta-pill">Activa <b id="meta-activa">—</b></div>
+    </div>
+  </div>
+
+  <div class="upload-area">
+    <label class="upload-label" for="file">↑ Bestand laden</label>
+    <input type="file" id="file" accept=".xlsx,.xls,.csv">
+    <span id="file-name">Geen bestand geselecteerd</span>
+    <div id="entity-name-wrap" style="display:none;flex:1;min-width:0">
+      <div id="entity-name" style="font-size:20px;font-weight:700;letter-spacing:.04em;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+    </div>
+    <button id="btn-excel" class="icon-btn excel-btn" onclick="openExcelModal()">⊞ Toon Excel</button>
+    <button id="btn-pdf" class="icon-btn pdf-btn" onclick="exportPDF()">↓ Export PDF</button>
+  </div>
+
+  <!-- Excel Modal -->
+  <div id="excel-modal" class="modal-overlay" onclick="closeExcelModal(event)">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-title" id="modal-filename">—</span>
+        <input class="modal-search" id="modal-search" type="text" placeholder="Zoeken…" oninput="filterTable(this.value)">
+        <button class="modal-close" onclick="closeExcelModal()">✕</button>
+      </div>
+      <div class="sheet-tabs" id="sheet-tabs"></div>
+      <div class="modal-table-wrap"><table id="modal-table"></table></div>
+      <div class="modal-footer"><span id="modal-info">—</span><span id="modal-filter"></span></div>
+    </div>
+  </div>
+
+  <!-- ══ OVERZICHT ══ -->
+  <div id="sec-overzicht" class="section active">
+
+    <!-- Welcome card -->
+    <div id="welcome-card" style="background:var(--accent);border-radius:4px;padding:32px 36px;margin-bottom:28px;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.03) 1px,transparent 1px);background-size:20px 20px"></div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:10px">Aan de slag</div>
+      <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:8px">Laad een NBB-jaarrekening</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.55);line-height:1.7;max-width:560px;margin-bottom:20px">
+        Berekent automatisch de <b style="color:rgba(255,255,255,.8)">Altman Z'-score</b> voor niet-beursgenoteerde bedrijven en detecteert financiële stresssignalen op basis van NBB-boekhoudcodes.
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;max-width:700px">
+        <div style="background:rgba(255,255,255,.06);border-radius:3px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:4px;letter-spacing:.08em;text-transform:uppercase">Altman Z'-score</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.6)">Erkend academisch faillissementsmodel</div>
+        </div>
+        <div style="background:rgba(255,255,255,.06);border-radius:3px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:4px;letter-spacing:.08em;text-transform:uppercase">5 componenten</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.6)">X1 t/m X5 met gewichten en bijdrage</div>
+        </div>
+        <div style="background:rgba(255,255,255,.06);border-radius:3px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:4px;letter-spacing:.08em;text-transform:uppercase">Stressindicatoren</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.6)">Liquiditeit, solvabiliteit, winst</div>
+        </div>
+        <div style="background:rgba(255,255,255,.06);border-radius:3px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.4);margin-bottom:4px;letter-spacing:.08em;text-transform:uppercase">PDF rapport</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.6)">Volledige analyse exporteerbaar</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="zscore-banner" class="zscore-banner">
+      <div class="zb-score-block">
+        <div class="zb-number" id="zb-score">—</div>
+        <div class="zb-label" id="zb-zone-label">—</div>
+      </div>
+      <div class="zb-divider"></div>
+      <div class="zb-components">
+        <div class="zb-comp"><div class="zb-comp-label">X1 · Werkkapitaal</div><div class="zb-comp-bar-wrap"><div class="zb-comp-bar-track"><div class="zb-comp-bar-fill" id="zbf-x1"></div></div><div class="zb-comp-val" id="zbv-x1">—</div></div></div>
+        <div class="zb-comp"><div class="zb-comp-label">X2 · Ingehouden winst</div><div class="zb-comp-bar-wrap"><div class="zb-comp-bar-track"><div class="zb-comp-bar-fill" id="zbf-x2"></div></div><div class="zb-comp-val" id="zbv-x2">—</div></div></div>
+        <div class="zb-comp"><div class="zb-comp-label">X3 · EBIT / Activa</div><div class="zb-comp-bar-wrap"><div class="zb-comp-bar-track"><div class="zb-comp-bar-fill" id="zbf-x3"></div></div><div class="zb-comp-val" id="zbv-x3">—</div></div></div>
+        <div class="zb-comp"><div class="zb-comp-label">X4 · EV / Schulden</div><div class="zb-comp-bar-wrap"><div class="zb-comp-bar-track"><div class="zb-comp-bar-fill" id="zbf-x4"></div></div><div class="zb-comp-val" id="zbv-x4">—</div></div></div>
+        <div class="zb-comp"><div class="zb-comp-label">X5 · Omzet / Activa</div><div class="zb-comp-bar-wrap"><div class="zb-comp-bar-track"><div class="zb-comp-bar-fill" id="zbf-x5"></div></div><div class="zb-comp-val" id="zbv-x5">—</div></div></div>
+      </div>
+      <div class="zb-verdict"><div class="zb-verdict-title">Risicobeoordeling</div><div class="zb-verdict-text" id="zb-verdict">—</div></div>
+    </div>
+
+    <div class="section-title">Kerncijfers faillissementsrisico</div>
+    <div class="ctx-strip">
+      <div class="ctx-card"><div class="ctx-card-label">Omzet (70)</div><div class="ctx-card-value gold" id="ctx-omzet">—</div></div>
+      <div class="ctx-card"><div class="ctx-card-label">Totale activa (20/58)</div><div class="ctx-card-value gold" id="ctx-activa">—</div></div>
+      <div class="ctx-card"><div class="ctx-card-label">Eigen vermogen (10/15)</div><div class="ctx-card-value" id="ctx-ev">—</div></div>
+      <div class="ctx-card"><div class="ctx-card-label">Totale schulden</div><div class="ctx-card-value" id="ctx-schuld">—</div></div>
+      <div class="ctx-card"><div class="ctx-card-label">Werkkapitaal</div><div class="ctx-card-value" id="ctx-wk">—</div></div>
+      <div class="ctx-card"><div class="ctx-card-label">EBIT (9901)</div><div class="ctx-card-value" id="ctx-ebit">—</div></div>
+      <div class="ctx-card"><div class="ctx-card-label">Nettowinst (9904)</div><div class="ctx-card-value" id="ctx-winst">—</div></div>
+      <div class="ctx-card"><div class="ctx-card-label">Retained earnings (11+13+14)</div><div class="ctx-card-value" id="ctx-reserves">—</div></div>
+    </div>
+
+    <div class="section-title">Kernratio's risicoprofiel</div>
+    <div class="ratio-grid" id="grid-overzicht"></div>
+  </div>
+
+  <!-- ══ Z'-SCORE ══ -->
+  <div id="sec-zscore" class="section">
+    <div class="section-title">Altman Z'-score — Niet-beursgenoteerde ondernemingen (1983)</div>
+    <div style="background:rgba(184,150,62,.08);border:1px solid rgba(184,150,62,.3);border-radius:3px;padding:12px 16px;margin-bottom:16px;font-size:11px;color:var(--muted);line-height:1.7"><b style="color:var(--accent)">Disclaimer:</b> De Altman Z'-score is een statistisch model gebaseerd op historische data. Het is een <b>indicatief hulpmiddel</b>, geen garantie. Andere factoren (sectorspecifieke risico's, marktomstandigheden, managementkwaliteit) zijn niet opgenomen. Gebruik steeds in combinatie met kwalitatieve analyse.</div>
+    <div style="background:var(--accent);border-radius:3px;padding:16px 20px;margin-bottom:20px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gold);margin-bottom:8px">Z' = 0.717·X1 + 0.847·X2 + 3.107·X3 + 0.420·X4 + 0.998·X5</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;font-size:11px;color:rgba(255,255,255,.55)">
+        <div><b style="color:rgba(255,255,255,.8)">X1</b> = Werkkapitaal (vlottend − KT schulden incl. 492/3) / Totale activa</div>
+        <div><b style="color:rgba(255,255,255,.8)">X2</b> = Retained earnings (11+13+14) / Totale activa</div>
+        <div><b style="color:rgba(255,255,255,.8)">X3</b> = EBIT / Totale activa</div>
+        <div><b style="color:rgba(255,255,255,.8)">X4</b> = Boekwaarde EV / Totale schulden</div>
+        <div><b style="color:rgba(255,255,255,.8)">X5</b> = Omzet / Totale activa</div>
+      </div>
+    </div>
+
+    <div class="section-title">Positie op de Z'-schaal</div>
+    <div class="zscore-gauge-wrap">
+      <div class="zscore-track-outer">
+        <div class="zscore-track-needle" id="gauge-needle" style="left:0%"></div>
+        <div style="position:absolute;top:0;left:24.6%;width:2px;height:100%;background:rgba(255,255,255,.6)"></div>
+        <div style="position:absolute;top:0;left:58%;width:2px;height:100%;background:rgba(255,255,255,.6)"></div>
+      </div>
+      <div class="zscore-zone-labels">
+        <span class="z-lbl-risico">Hoog risico (Z' &lt; 1.23)</span>
+        <span class="z-lbl-grijs">Grijze zone (1.23 – 2.9)</span>
+        <span class="z-lbl-veilig">▲ Veilig (Z' &gt; 2.9)</span>
+      </div>
+      <div class="zscore-zone-ticks">
+        <span>0</span><span style="margin-left:22%">1.23</span><span style="margin-left:27%">2.9</span><span style="margin-left:auto">5.0</span>
+      </div>
+    </div>
+
+    <div class="section-title">Z'-score componenten</div>
+    <div class="ratio-grid" id="grid-zscore"></div>
+  </div>
+
+  <!-- ══ LIQUIDITEIT ══ -->
+  <div id="sec-liquiditeit" class="section">
+    <div class="section-title">Liquiditeitsstress — Kortetermijn betalingscapaciteit</div>
+    <div class="ratio-grid" id="grid-liq"></div>
+  </div>
+
+  <!-- ══ SOLVABILITEIT ══ -->
+  <div id="sec-solvabiliteit" class="section">
+    <div class="section-title">Solvabiliteitsstress — Structurele schuldpositie</div>
+    <div class="ratio-grid" id="grid-solv"></div>
+  </div>
+
+  <!-- ══ WINST ══ -->
+  <div id="sec-winst" class="section">
+    <div class="section-title">Winststabiliteit — Rentabiliteit en cashgeneratie</div>
+    <div class="ratio-grid" id="grid-winst"></div>
+  </div>
+
+  <!-- ══ WAARSCHUWINGEN ══ -->
+  <div id="sec-waarschuwingen" class="section">
+    <div class="section-title">Automatische waarschuwingen &amp; stresssignalen</div>
+    <div class="warning-list" id="warning-list">
+      <div style="padding:48px;text-align:center;color:var(--muted);font-size:13px;border:2px dashed var(--border);border-radius:4px">Laad een bestand om waarschuwingen te genereren.</div>
+    </div>
+  </div>
+
+  <!-- ══ COMPONENTEN ══ -->
+  <div id="sec-componenten" class="section">
+    <div class="section-title">Z'-score componentanalyse</div>
+    <table class="xcomp-table" id="comp-table">
+      <thead><tr>
+        <th>Component</th><th>Formule</th><th>Gewicht</th><th>Waarde (Xn)</th><th>Bijdrage (w × Xn)</th>
+      </tr></thead>
+      <tbody id="comp-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:48px;color:var(--muted)">Laad een bestand om de componentanalyse te zien.</td></tr>
+      </tbody>
+    </table>
+    <div id="comp-codes" style="margin-top:20px;display:none">
+      <div class="section-title">Gebruikte NBB-codes</div>
+      <div class="ratio-grid" id="comp-codes-grid"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /shell -->
+<div id="toast"></div>
+
+<script>
+// ══ STATE ══════════════════════════════════════════════════════════════════════
+let _data = null;
+let _workbook = null;
+
+// ══ HELPERS ════════════════════════════════════════════════════════════════════
+function fmtEur(v) {
+  if (!isFinite(v) || isNaN(v)) return '—';
+  const a = Math.abs(v), s = v < 0 ? '-' : '';
+  if (a >= 1e9) return s + (a/1e9).toFixed(2) + ' Mrd';
+  if (a >= 1e6) return s + (a/1e6).toFixed(2) + ' M';
+  if (a >= 1e3) return s + (a/1e3).toFixed(1) + ' K';
+  return s + Math.round(a).toLocaleString('nl-BE') + ' €';
+}
+function fmtPct(v) { return isFinite(v) && !isNaN(v) ? v.toFixed(1) + '%' : '—'; }
+function fmtX(v, d) { return isFinite(v) && !isNaN(v) ? v.toFixed(d||2) : '—'; }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(t._t); t._t = setTimeout(() => t.style.display = 'none', 3500);
+}
+function showSection(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  if (el) el.classList.add('active');
+  if (window.innerWidth <= 768) toggleSidebar(false);
+}
+function toggleSidebar(forceClose) {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  const isOpen = sb.classList.contains('open');
+  if (forceClose === false || isOpen) { sb.classList.remove('open'); ov.classList.remove('open'); }
+  else { sb.classList.add('open'); ov.classList.add('open'); }
+}
+function toggleFormula(id, btn) {
+  const el = document.getElementById(id);
+  el.classList.toggle('open');
+  btn.querySelector('span').textContent = el.classList.contains('open') ? '▼' : '▶';
+}
+function g(v, c) { return v[c] ?? 0; }
+
+// ══ PARSING (identical to FinDash) ════════════════════════════════════════════
+function parseRows(rows) {
+  const v = {}; let refNr = null; let entityName = null;
+  const refLabels = ['reference number','referentienummer','referentie','ref nr','ref. nr','filenumber','dossiernummer','dossier nr','filing number'];
+  const entityLabels = ['entity name','onderneming','company name','naam','vennootschap','bedrijfsnaam','denomination'];
+  rows.forEach(r => {
+    if (!r[0]) return;
+    const cel0 = String(r[0]).trim();
+    const lower = cel0.toLowerCase();
+    if (!entityName && entityLabels.some(l => lower.includes(l))) {
+      let raw = r[1]!==undefined&&r[1]!=='' ? String(r[1]).replace(/"/g,'').trim() : cel0.includes(',') ? cel0.split(',').slice(1).join(',').replace(/"/g,'').trim() : null;
+      if (raw && isNaN(Number(raw))) { entityName = raw; return; }
+    }
+    if (!refNr && refLabels.some(l => lower.includes(l))) {
+      let raw = r[1]!==undefined&&r[1]!=='' ? String(r[1]).replace(/"/g,'').trim() : cel0.includes(',') ? cel0.split(',').slice(1).join(',').replace(/"/g,'').trim() : null;
+      if (raw) { refNr = raw; return; }
+    }
+    let code, value;
+    if (cel0.includes(',')) { const p=cel0.split(','); code=p[0].trim(); value=Number(p[1].replace(/"/g,'')); }
+    else { code=cel0; value=Number(r[1]); }
+    if (code) v[code] = value;
+  });
+  return {v, jaar: refNr, entityName};
+}
+
+// ══ EXTRACT VARIABLES (NBB codes) ════════════════════════════════════════════
+function extractVars(v) {
+  // Balans — Activa
+  const totActiva   = g(v,'20/58');
+  const vaste       = g(v,'20/28') || g(v,'20/27');
+  const vlottende   = g(v,'29/58') || g(v,'29/57');
+  const voorraden   = g(v,'3');
+  const vorderKT    = g(v,'40/41');
+  const geldbel     = g(v,'50/53');
+  const liquide     = g(v,'54/58');
+  const overlopA    = g(v,'490/1');
+  const vlottendeKT = vlottende > 0 ? vlottende : Math.max(0, totActiva - vaste);
+
+  // Balans — Passiva
+  const totPassiva  = g(v,'10/49') || totActiva;
+  const eigenV      = g(v,'10/15');
+  const reserves    = g(v,'14');                         // ingehouden winst / reserves
+  const kapitaal    = g(v,'10') || g(v,'100');
+  const schLT       = g(v,'170/4') || g(v,'17');
+  const schKT       = g(v,'42/48');
+  const overlopP    = g(v,'492/3');
+  const finSchKT    = g(v,'43');
+  const handschuld  = g(v,'44');
+  const totSchuld   = g(v,'17/49') || (totPassiva - eigenV);
+  const schKTtot    = schKT + overlopP;
+
+  // Resultatenrekening
+  const omzet       = g(v,'70');
+  const c74         = g(v,'74');
+  const c75         = g(v,'75');
+  const ebit        = g(v,'9901');
+  const nettowinst  = g(v,'9904');
+  const c630        = g(v,'630');
+  const c631        = g(v,'631/4');
+  const c635        = g(v,'635/8');
+  const afs         = c630 + c631 + c635;
+  const ebitda      = ebit + afs;
+  const c60         = g(v,'60');
+  const c62         = g(v,'62');
+  const c65         = g(v,'65');
+
+  // Werkkapitaal — conform Altman: vlottende activa KT min ALLE kortetermijnverplichtingen incl. overlopende passiva
+  const werkkapitaal = vlottendeKT - schKTtot;   // schKTtot = 42/48 + 492/3
+
+  // ── Altman Z' (niet-beursgenoteerd, 1983) ──
+  // X1 = Werkkapitaal / Totale activa
+  // Werkkapitaal = vlottende activa KT − alle KT schulden (incl. overlopende passiva 492/3)
+  const X1 = totActiva !== 0 ? werkkapitaal / totActiva : NaN;
+
+  // X2 = Retained Earnings / Totale activa
+  // "Retained earnings" in Belgisch boekhoudrecht = overgedragen winst/verlies (14)
+  // + wettelijke reserve (11) + beschikbare reserves (13) — dit zijn alle gecumuleerde ingehouden winsten
+  const retainedEarnings = reserves + g(v,'11') + g(v,'13');
+  const X2 = totActiva !== 0 ? retainedEarnings / totActiva : NaN;
+
+  // X3 = EBIT / Totale activa
+  const X3 = totActiva !== 0 ? ebit / totActiva : NaN;
+
+  // X4 = Boekwaarde eigen vermogen / Totale schulden (niet marktwaarde!)
+  // Eigen vermogen = 10/15, Totale schulden = 17/49
+  const X4 = totSchuld !== 0 ? eigenV / totSchuld : NaN;
+
+  // X5 = Omzet / Totale activa
+  const X5 = totActiva !== 0 ? omzet / totActiva : NaN;
+
+  // Z' = 0.717·X1 + 0.847·X2 + 3.107·X3 + 0.420·X4 + 0.998·X5
+  const zScore = 0.717*X1 + 0.847*X2 + 3.107*X3 + 0.420*X4 + 0.998*X5;
+
+  // Afgeleide ratios
+  const liqR        = schKTtot !== 0 ? (voorraden + vorderKT + geldbel + liquide + overlopA) / schKTtot : NaN;
+  const liqE        = schKT !== 0 ? (vorderKT + geldbel + liquide) / schKT : NaN;
+  const cashRatio   = schKT !== 0 ? (geldbel + liquide) / schKT : NaN;
+  const solvPct     = totPassiva !== 0 ? eigenV / totPassiva * 100 : NaN;
+  const schuldRatio = totActiva !== 0 ? totSchuld / totActiva * 100 : NaN;
+  const debtCoverage= (ebitda > 0) ? totSchuld / ebitda : NaN; // NaN bij negatieve EBITDA: schulddelging is onmeetbaar
+  const ebitMarge   = omzet !== 0 ? ebit / omzet * 100 : NaN;
+  const nettomarge  = omzet !== 0 ? nettowinst / omzet * 100 : NaN;
+  const ebitdaMarge = omzet !== 0 ? ebitda / omzet * 100 : NaN;
+  const roe         = (eigenV > 0) ? nettowinst / eigenV * 100 : NaN; // onmeetbaar bij negatief EV
+  const roa         = totActiva !== 0 ? ebit / totActiva * 100 : NaN;
+  const interestDek = (c65 > 0) ? ebit / c65 : NaN; // enkel bij positieve financiële kosten
+  const omloopActiva= totActiva !== 0 ? omzet / totActiva : NaN;
+  const persKostRat = omzet !== 0 ? c62 / omzet * 100 : NaN;
+
+  return {
+    totActiva, vaste, vlottende, vlottendeKT, voorraden, vorderKT, geldbel, liquide, overlopA,
+    totPassiva, eigenV, reserves, retainedEarnings, kapitaal, schLT, schKT, overlopP, finSchKT, handschuld, totSchuld, schKTtot,
+    omzet, c74, c75, ebit, nettowinst, afs, ebitda, c60, c62, c65,
+    werkkapitaal, X1, X2, X3, X4, X5, zScore,
+    liqR, liqE, cashRatio, solvPct, schuldRatio, debtCoverage,
+    ebitMarge, nettomarge, ebitdaMarge, roe, roa, interestDek, omloopActiva, persKostRat
+  };
+}
+
+// ══ RATIO DEFINITIONS ═════════════════════════════════════════════════════════
+function getRatioDefs(r) {
+  return [
+    // ── OVERZICHT (kernratio's) ──
+    {
+      id:'liqR', sections:['overzicht','liquiditeit'],
+      label:'Liquiditeit — Ruime zin', valCls:null, min:0, max:2.5, higherBetter:true,
+      norm:1.0, thresholds:[1.5, 1.0, 0.75, 0.5],
+      formula:'(Voorraden + Vorderingen + Geldmiddelen + Overlopend) ÷ Schulden KT',
+      codes:'(3 + 40/41 + 50/53 + 54/58 + 490/1) ÷ (42/48 + 492/3)',
+      desc:'Dekt alle vlottende activa de kortetermijnschulden? Onder 1.0 = liquiditeitsrisico.',
+      fvRows: r => [['Voorraden (3)', r.voorraden],['Vorderingen (40/41)', r.vorderKT],['Liquide (54/58)', r.liquide],['Schulden KT (42/48)', r.schKT],['Overlopend P (492/3)', r.overlopP]],
+      val: r => r.liqR,
+    },
+    {
+      id:'solvPct', sections:['overzicht','solvabiliteit'],
+      label:'Solvabiliteit (EV / Activa)', valCls:'pct', min:0, max:80, higherBetter:true,
+      norm:25, thresholds:[40, 25, 15, 8],
+      formula:'Eigen vermogen ÷ Totale activa × 100',
+      codes:'10/15 ÷ 20/58 × 100',
+      desc:'Percentage van activa gefinancierd met eigen vermogen. Hoe hoger, hoe onafhankelijker van schuldeisers.',
+      fvRows: r => [['Eigen vermogen (10/15)', r.eigenV],['Totale activa (20/58)', r.totActiva]],
+      val: r => r.solvPct,
+    },
+    {
+      id:'ebitMarge', sections:['overzicht','winst'],
+      label:'EBIT-marge', valCls:'pct', min:-30, max:30, higherBetter:true,
+      norm:5, thresholds:[12, 5, 2, 0],
+      formula:'EBIT ÷ Omzet × 100',
+      codes:'9901 ÷ 70 × 100',
+      desc:'Operationele winstmarge vóór interest en belastingen. Negatief = bedrijfsverliezen.',
+      fvRows: r => [['EBIT (9901)', r.ebit],['Omzet (70)', r.omzet]],
+      val: r => r.ebitMarge,
+    },
+    {
+      id:'schuldRatio', sections:['overzicht','solvabiliteit'],
+      label:'Schuldenratio (Schulden / Activa)', valCls:'pct', min:0, max:100, higherBetter:false,
+      norm:65, thresholds:[40, 65, 75, 85],
+      formula:'Totale schulden ÷ Totale activa × 100',
+      codes:'17/49 ÷ 20/58 × 100',
+      desc:'Deel van activa gefinancierd met schulden. Boven 75% = verhoogd faillissementsrisico.',
+      fvRows: r => [['Totale schulden (17/49)', r.totSchuld],['Totale activa (20/58)', r.totActiva]],
+      val: r => r.schuldRatio,
+    },
+    // ── LIQUIDITEIT ──
+    {
+      id:'liqE', sections:['liquiditeit'],
+      label:'Liquiditeit — Enge zin', valCls:null, min:0, max:2.0, higherBetter:true,
+      norm:0.7, thresholds:[1.2, 0.7, 0.4, 0.2],
+      formula:'(Vorderingen + Geldmiddelen) ÷ Schulden KT',
+      codes:'(40/41 + 50/53 + 54/58) ÷ 42/48',
+      desc:'Zonder voorraden. Toont directe liquiditeit. Onder 0.5 = acuut betalingsrisico.',
+      fvRows: r => [['Vorderingen (40/41)', r.vorderKT],['Liquide (54/58)', r.liquide],['Geldbeleggingen (50/53)', r.geldbel],['Schulden KT (42/48)', r.schKT]],
+      val: r => r.liqE,
+    },
+    {
+      id:'cashRatio', sections:['liquiditeit'],
+      label:'Cash Ratio (Liquide / Schulden KT)', valCls:null, min:0, max:1.0, higherBetter:true,
+      norm:0.1, thresholds:[0.3, 0.1, 0.05, 0.01],
+      formula:'(Geldbeleggingen + Liquide middelen) ÷ Schulden KT',
+      codes:'(50/53 + 54/58) ÷ 42/48',
+      desc:'Meest conservatieve liquiditeitsmaat. Alleen direct beschikbare geldmiddelen.',
+      fvRows: r => [['Geldbeleggingen (50/53)', r.geldbel],['Liquide middelen (54/58)', r.liquide],['Schulden KT (42/48)', r.schKT]],
+      val: r => r.cashRatio,
+    },
+    // ── SOLVABILITEIT ──
+    {
+      id:'debtCoverage', sections:['solvabiliteit'],
+      label:'Schulddelging (Schulden / EBITDA)', valCls:'x', min:0, max:15, higherBetter:false,
+      norm:4, thresholds:[2, 4, 7, 10],
+      formula:'Totale schulden ÷ EBITDA',
+      codes:'17/49 ÷ (9901 + 630 + 631/4 + 635/8)',
+      desc:'Hoeveel jaar positieve EBITDA-cashflow nodig om alle schulden af te lossen. Toont alleen bij positieve EBITDA. Boven 7× = zware schuldenlast. Niet beschikbaar bij negatieve EBITDA.',
+      fvRows: r => [['Totale schulden (17/49)', r.totSchuld],['EBIT (9901)', r.ebit],['Afschrijvingen (630+631/4+635/8)', r.afs],['EBITDA', r.ebitda]],
+      val: r => r.debtCoverage,
+    },
+    {
+      id:'interestDek', sections:['solvabiliteit'],
+      label:'Interestdekkingsgraad (EBIT / Fin.kosten)', valCls:'x', min:0, max:15, higherBetter:true,
+      norm:3, thresholds:[5, 3, 1.5, 1],
+      formula:'EBIT ÷ Financiële kosten',
+      codes:'9901 ÷ 65',
+      desc:'Dekt de operationele winst de interestlasten? Onder 1.5× = risico op wanbetalingen.',
+      fvRows: r => [['EBIT (9901)', r.ebit],['Financiële kosten (65)', r.c65]],
+      val: r => r.interestDek,
+    },
+    // ── WINST ──
+    {
+      id:'nettomarge', sections:['winst'],
+      label:'Nettomarge', valCls:'pct', min:-30, max:20, higherBetter:true,
+      norm:3, thresholds:[8, 3, 1, 0],
+      formula:'Nettowinst ÷ Omzet × 100',
+      codes:'9904 ÷ 70 × 100',
+      desc:'Uiteindelijke winstgevendheid na alle kosten en belastingen. Negatief = structureel verlies.',
+      fvRows: r => [['Nettowinst (9904)', r.nettowinst],['Omzet (70)', r.omzet]],
+      val: r => r.nettomarge,
+    },
+    {
+      id:'ebitdaMarge', sections:['winst'],
+      label:'EBITDA-marge', valCls:'pct', min:-10, max:30, higherBetter:true,
+      norm:8, thresholds:[15, 8, 4, 1],
+      formula:'EBITDA ÷ Omzet × 100',
+      codes:'(9901 + 630 + 631/4 + 635/8) ÷ 70 × 100',
+      desc:'Operationele cashgeneratie. Geeft cashvermogen voor schuldaflossing en investeringen.',
+      fvRows: r => [['EBIT (9901)', r.ebit],['Afschrijvingen (630+631/4+635/8)', r.afs],['Omzet (70)', r.omzet]],
+      val: r => r.ebitdaMarge,
+    },
+    {
+      id:'roe', sections:['winst'],
+      label:'Return on Equity (ROE)', valCls:'pct', min:-30, max:30, higherBetter:true,
+      norm:5, thresholds:[15, 5, 2, 0],
+      formula:'Nettowinst ÷ Eigen vermogen × 100',
+      codes:'9904 ÷ 10/15 × 100',
+      desc:'Rendement op eigen vermogen. Enkel berekend bij positief eigen vermogen. Negatief = kapitaalvernietiging. Niet beschikbaar bij negatief eigen vermogen (zie waarschuwingen).',
+      fvRows: r => [['Nettowinst (9904)', r.nettowinst],['Eigen vermogen (10/15)', r.eigenV]],
+      val: r => r.roe,
+    },
+    {
+      id:'roa', sections:['winst'],
+      label:'Return on Assets (ROA)', valCls:'pct', min:-10, max:20, higherBetter:true,
+      norm:3, thresholds:[8, 3, 1, 0],
+      formula:'EBIT ÷ Totale activa × 100',
+      codes:'9901 ÷ 20/58 × 100',
+      desc:'Rendement op alle activa. Equivalent aan X3 in de Z\'-score. Centraal in het Altman-model.',
+      fvRows: r => [['EBIT (9901)', r.ebit],['Totale activa (20/58)', r.totActiva]],
+      val: r => r.roa,
+    },
+    // ── Z'-COMPONENTEN ──
+    {
+      id:'X1', sections:['zscore'],
+      label:'X1 — Werkkapitaal / Totale activa (gewicht 0.717)', valCls:null, min:-0.5, max:0.8, higherBetter:true,
+      norm:0.1, thresholds:[0.3, 0.1, 0.0, -0.1],
+      formula:'Werkkapitaal ÷ Totale activa  ×  0.717',
+      codes:'(29/58 − 42/48 − 492/3) ÷ 20/58',
+      desc:'Meet kortetermijnliquiditeit relatief aan de omvang van het bedrijf. Werkkapitaal = vlottende activa KT − alle KT schulden incl. overlopende passiva (492/3). Negatief = verhoogd faillissementsrisico.',
+      fvRows: r => [['Vlottende activa KT (29/58)', r.vlottendeKT],['Schulden KT (42/48)', r.schKT],['Overlopende passiva (492/3)', r.overlopP],['Werkkapitaal', r.werkkapitaal],['Totale activa (20/58)', r.totActiva]],
+      val: r => r.X1,
+    },
+    {
+      id:'X2', sections:['zscore'],
+      label:'X2 — Ingehouden winst / Totale activa (gewicht 0.847)', valCls:null, min:-0.3, max:0.8, higherBetter:true,
+      norm:0.1, thresholds:[0.3, 0.1, 0.0, -0.05],
+      formula:'(Overgedragen winst + Wettelijke reserve + Beschikbare reserves) ÷ Totale activa  ×  0.847',
+      codes:'(14 + 11 + 13) ÷ 20/58',
+      desc:'Meet gecumuleerde ingehouden winst over de levensloop van het bedrijf. Omvat: overgedragen winst (14), wettelijke reserve (11) en beschikbare reserves (13). Jonge bedrijven scoren lager. Negatief = structurele verliezen.',
+      fvRows: r => [['Overgedragen winst/verlies (14)', r.reserves],['Gecumuleerde retained earnings (11+13+14)', r.retainedEarnings],['Totale activa (20/58)', r.totActiva]],
+      val: r => r.X2,
+    },
+    {
+      id:'X3', sections:['zscore'],
+      label:'X3 — EBIT / Totale activa (gewicht 3.107)', valCls:null, min:-0.4, max:0.4, higherBetter:true,
+      norm:0.05, thresholds:[0.15, 0.05, 0.0, -0.05],
+      formula:'EBIT ÷ Totale activa  ×  3.107',
+      codes:'9901 ÷ 20/58',
+      desc:'Zwaarst gewogen component. Meet productiviteit van activa ongeacht financiering. Negatief EBIT is een sterk faillissementssignaal.',
+      fvRows: r => [['EBIT (9901)', r.ebit],['Totale activa (20/58)', r.totActiva]],
+      val: r => r.X3,
+    },
+    {
+      id:'X4', sections:['zscore'],
+      label:'X4 — Boekwaarde EV / Totale schulden (gewicht 0.420)', valCls:null, min:-1, max:3, higherBetter:true,
+      norm:0.5, thresholds:[1.5, 0.5, 0.25, 0.1],
+      formula:'Eigen vermogen (boekwaarde) ÷ Totale schulden  ×  0.420',
+      codes:'10/15 ÷ 17/49',
+      desc:'Verhouding eigen vermogen tot schulden. Let op: niet-beursgenoteerd → boekwaarde (niet marktwaarde). Hoog = sterk eigen vermogen buffer.',
+      fvRows: r => [['Eigen vermogen (10/15)', r.eigenV],['Totale schulden (17/49)', r.totSchuld]],
+      val: r => r.X4,
+    },
+    {
+      id:'X5', sections:['zscore'],
+      label:'X5 — Omzet / Totale activa (gewicht 0.998)', valCls:null, min:0, max:3, higherBetter:true,
+      norm:1.0, thresholds:[1.5, 1.0, 0.5, 0.3],
+      formula:'Omzet ÷ Totale activa  ×  0.998',
+      codes:'70 ÷ 20/58',
+      desc:'Efficiëntie van activagebruik. Hoge ratio = activa worden productief ingezet. Lage ratio kan op overinvestering of stagnerende omzet wijzen.',
+      fvRows: r => [['Omzet (70)', r.omzet],['Totale activa (20/58)', r.totActiva]],
+      val: r => r.X5,
+    },
+  ];
+}
+
+// ══ CARD BUILDER ══════════════════════════════════════════════════════════════
+function buildCard(def, val) {
+  const isSpecial = def.thresholds === null;
+  let level = 'nb';
+  if (isFinite(val) && !isNaN(val)) {
+    const thr = def.thresholds;
+    let idx = 4;
+    if (def.higherBetter) {
+      if (val >= thr[0]) idx=0; else if (val >= thr[1]) idx=1;
+      else if (val >= thr[2]) idx=2; else if (val >= thr[3]) idx=3;
+    } else {
+      if (val <= thr[0]) idx=0; else if (val <= thr[1]) idx=1;
+      else if (val <= thr[2]) idx=2; else if (val <= thr[3]) idx=3;
+    }
+    const LVS = ['uitstekend','goed','matig','zwak','slecht'];
+    level = LVS[idx];
+  }
+  const LEVEL_LABELS = {uitstekend:'Uitstekend',goed:'Goed',matig:'Matig',zwak:'Zwak',slecht:'Slecht',nb:'Niet beschikbaar'};
+  const LEVEL_COLORS = {uitstekend:'#1b5e20',goed:'#2e7d32',matig:'#f9a825',zwak:'#e65100',slecht:'#c62828',nb:'var(--muted)'};
+
+  let dispVal = 'N/B', valClass = 'ratio-value nb';
+  if (isFinite(val) && !isNaN(val)) {
+    switch(def.valCls) {
+      case 'pct':  dispVal = val.toFixed(1); valClass = 'ratio-value pct'; break;
+      case 'eur':  dispVal = fmtEur(val); valClass = 'ratio-value eur'; break;
+      case 'x':    dispVal = val.toFixed(1); valClass = 'ratio-value x'; break;
+      default:     dispVal = val.toFixed(2); valClass = 'ratio-value'; break;
+    }
+  }
+
+  // Gauge
+  let gaugeHtml = '';
+  if (def.min !== null && def.normKey !== false) {
+    const mn = def.min, mx = def.max;
+    const fillPct = isFinite(val) ? Math.max(0, Math.min(100, (val-mn)/(mx-mn)*100)) : 0;
+    const normPct = def.norm !== null ? Math.max(0, Math.min(100, (def.norm-mn)/(mx-mn)*100)) : null;
+    let fillColor = LEVEL_COLORS[level];
+    const normMarker = normPct !== null ? `<div class="gauge-norm" style="left:${normPct}%"></div>` : '';
+    const lMin = def.valCls==='pct' ? mn+'%' : def.valCls==='x' ? mn+'×' : mn.toFixed?.(2)??mn;
+    const lMax = def.valCls==='pct' ? mx+'%' : def.valCls==='x' ? mx+'×' : mx.toFixed?.(2)??mx;
+    const normLabel = def.norm !== null ? (def.valCls==='pct'?def.norm+'%':def.valCls==='x'?def.norm+'×':def.norm.toFixed(2)) : '—';
+    gaugeHtml = `
+      <div class="gauge-wrap">
+        <div class="gauge-track">
+          <div class="gauge-fill" style="width:${fillPct}%;background:${fillColor}"></div>
+          ${normMarker}
+        </div>
+        <div class="gauge-labels"><span>${lMin}</span><span>Ref ${normLabel}</span><span>${lMax}</span></div>
+      </div>`;
+  }
+
+  const indHtml = `<div class="indicator lv-${level}"><span class="ind-dot"></span><span class="ind-label">${LEVEL_LABELS[level]}</span></div>`;
+  const normText = def.norm !== null ? `<div class="ratio-norm">Referentie: ${def.higherBetter?'>':'<'} ${def.valCls==='pct'?def.norm+'%':def.valCls==='x'?def.norm+'×':def.norm.toFixed(2)}</div>` : '';
+
+  const fvRows = def.fvRows(_data);
+  const fvHtml = fvRows.map(([lbl,v]) =>
+    `<div class="fv-row"><span class="fv-label">${lbl}</span><span class="fv-val">${isFinite(v)&&!isNaN(v)?(Math.abs(v)>=1000?v.toLocaleString('nl-BE',{maximumFractionDigits:0}):v.toFixed(2)):'—'}</span></div>`
+  ).join('');
+
+  const accentColor = LEVEL_COLORS[level];
+  return `
+    <div class="ratio-card" style="border-top-color:${accentColor}">
+      <div class="ratio-card-label">${def.label}</div>
+      <div class="${valClass}">${dispVal}</div>
+      ${gaugeHtml}
+      ${indHtml}
+      ${normText}
+      <button class="formula-toggle" onclick="toggleFormula('fdet-${def.id}', this)"><span>▶</span> Formule &amp; cijfers</button>
+      <div class="formula-detail" id="fdet-${def.id}">
+        <div class="formula-text">${def.formula}</div>
+        <div class="formula-text" style="opacity:.4;font-size:9px;margin-top:2px">${def.codes}</div>
+        <div class="formula-values">${fvHtml}</div>
+        <div class="formula-desc">${def.desc}</div>
+      </div>
+    </div>`;
+}
+
+// ══ RENDER ALL ════════════════════════════════════════════════════════════════
+function renderAll(r) {
+  _data = r;
+  const defs = getRatioDefs(r);
+
+  // Render ratio grids by section
+  const sections = ['overzicht','zscore','liquiditeit','solvabiliteit','winst'];
+  sections.forEach(sec => {
+    const cards = defs.filter(d => d.sections.includes(sec)).map(d => buildCard(d, d.val(r)));
+    const el = document.getElementById('grid-' + (sec==='overzicht'?'overzicht':sec==='zscore'?'zscore':sec==='liquiditeit'?'liq':sec==='solvabiliteit'?'solv':'winst'));
+    if (el) el.innerHTML = cards.join('');
+  });
+
+  renderBanner(r);
+  renderGauge(r.zScore);
+  renderWarnings(r);
+  renderComponents(r);
+}
+
+// ══ Z'-SCORE BANNER ═══════════════════════════════════════════════════════════
+function renderBanner(r) {
+  const z = r.zScore;
+  if (!isFinite(z) || isNaN(z)) return;
+
+  const banner = document.getElementById('zscore-banner');
+  banner.className = 'zscore-banner visible';
+  let zone, zoneLabel, verdict;
+  if (z > 2.9) {
+    zone = 'zone-veilig'; zoneLabel = 'Veilige Zone';
+    verdict = `Z'-score van ${z.toFixed(2)} ligt in de veilige zone (> 2.9). Het faillissementsrisico is laag. De financiële structuur is gezond.`;
+  } else if (z >= 1.23) {
+    zone = 'zone-grijs'; zoneLabel = 'Grijze Zone';
+    verdict = `Z'-score van ${z.toFixed(2)} bevindt zich in de grijze zone (1.23–2.9). Verhoogd risico. Opvolging en bijsturing aanbevolen.`;
+  } else {
+    zone = 'zone-risico'; zoneLabel = 'Hoog Risico';
+    verdict = `Z'-score van ${z.toFixed(2)} wijst op ernstig faillissementsrisico (< 1.23). Dringende maatregelen vereist.`;
+  }
+  banner.classList.add(zone);
+
+  document.getElementById('zb-score').innerHTML = z.toFixed(2);
+  document.getElementById('zb-zone-label').textContent = zoneLabel;
+  document.getElementById('zb-verdict').textContent = verdict;
+
+  // Component bars in banner
+  const comps = [
+    {id:'x1', val:r.X1, max:0.8, weight:0.717},
+    {id:'x2', val:r.X2, max:0.6, weight:0.847},
+    {id:'x3', val:r.X3, max:0.3, weight:3.107},
+    {id:'x4', val:r.X4, max:2.0, weight:0.420},
+    {id:'x5', val:r.X5, max:2.5, weight:0.998},
+  ];
+  comps.forEach(c => {
+    const pct = isFinite(c.val) ? Math.max(0, Math.min(100, c.val / c.max * 100)) : 0;
+    const contrib = isFinite(c.val) ? c.weight * c.val : NaN;
+    const col = isFinite(c.val) && c.val > 0 ? '#81c784' : '#ef9a9a';
+    const f = document.getElementById('zbf-' + c.id);
+    const v = document.getElementById('zbv-' + c.id);
+    if (f) { f.style.width = pct + '%'; f.style.background = col; }
+    if (v) v.textContent = isFinite(c.val) ? c.val.toFixed(2) : '—';
+  });
+}
+
+// ══ Z'-SCORE GAUGE ════════════════════════════════════════════════════════════
+function renderGauge(z) {
+  if (!isFinite(z) || isNaN(z)) return;
+  // Linear scale: 0 = left (high risk), 5 = right (safe). Clamp at 0–5.
+  const MAX_Z = 5;
+  const pct = Math.max(0, Math.min(100, z / MAX_Z * 100));
+  const needle = document.getElementById('gauge-needle');
+  if (needle) needle.style.left = pct + '%';
+}
+
+// ══ WARNINGS ══════════════════════════════════════════════════════════════════
+function renderWarnings(r) {
+  const warnings = [];
+
+  function warn(title, desc, sev, tag, steps) {
+    warnings.push({title, desc, sev, tag, steps: steps || []});
+  }
+
+  // ── Z'-score ──
+  if (isFinite(r.zScore)) {
+    if (r.zScore < 1.23) {
+      const weak = [];
+      if (isFinite(r.X1) && r.X1 < 0.1) weak.push(`X1 (werkkapitaal) = ${r.X1.toFixed(3)}`);
+      if (isFinite(r.X2) && r.X2 < 0.05) weak.push(`X2 (retained earnings) = ${r.X2.toFixed(3)}`);
+      if (isFinite(r.X3) && r.X3 < 0.03) weak.push(`X3 (EBIT/activa) = ${r.X3.toFixed(3)}`);
+      if (isFinite(r.X4) && r.X4 < 0.3) weak.push(`X4 (EV/schulden) = ${r.X4.toFixed(3)}`);
+      if (isFinite(r.X5) && r.X5 < 0.5) weak.push(`X5 (omzet/activa) = ${r.X5.toFixed(3)}`);
+      warn('🔴 Kritisch faillissementsrisico — Rode zone',
+        `Z'-score van ${r.zScore.toFixed(2)} ligt onder de kritische grens van 1.23. Altman's model voorspelt in de oorspronkelijke studie een hoge kans op faillissement binnen 2 jaar bij scores in deze zone.`,
+        'kritisch', `Z' = ${r.zScore.toFixed(2)}`, [
+          { num: '1', col: 'red', text: `De Z'-score van <b>${r.zScore.toFixed(2)}</b> wordt bepaald door 5 componenten. Een score onder 1.23 betekent dat de gewogen combinatie van liquiditeit, rentabiliteit, kapitaalstructuur en activabenutting structureel onder het minimum ligt.` },
+          { num: '2', col: 'red', text: `De zwakste componenten zijn: <b>${weak.length ? weak.join(', ') : 'meerdere componenten tegelijk'}</b>. Elke component draagt bij aan het totale risicoprofiel — een lage score op X3 (gewicht 3.107) heeft het zwaarste effect.` },
+          { num: '3', col: 'red', text: `Praktische implicatie: kredietverstrekkers, leveranciers en investeerders beschouwen bedrijven in deze zone als <b>hoog risico</b>. Financiering wordt duurder of moeilijker te verkrijgen, wat het risico verder vergroot.` },
+          { num: '4', col: 'gold', text: `Prioritaire acties: verbetering van X3 via winstgevendheid (operationele besparingen, prijsverhoging), verbetering van X1 via werkkapitaalbeheer (debiteuren sneller innen, voorraden reduceren), en X4 via kapitaalinjectie of schuldaflossing.` },
+        ]);
+    } else if (r.zScore < 2.9) {
+      const contrib3 = isFinite(r.X3) ? (3.107 * r.X3).toFixed(3) : '—';
+      const needed = (2.9 - r.zScore).toFixed(2);
+      warn('🟡 Grijze zone — Verhoogd risico',
+        `Z'-score van ${r.zScore.toFixed(2)} bevindt zich in de grijze zone (1.23–2.90). Deze zone kenmerkt zich door onzekerheid: het model kan geen definitieve uitspraak doen, maar het risico is reëel aanwezig.`,
+        'hoog', `Z' = ${r.zScore.toFixed(2)}`, [
+          { num: '1', col: 'gold', text: `Een score van <b>${r.zScore.toFixed(2)}</b> betekent dat de onderneming ${needed} punten verwijderd is van de veilige zone (> 2.9). Dit is overbrugbaar met gerichte verbeteringen.` },
+          { num: '2', col: 'gold', text: `X3 (EBIT/activa, gewicht 3.107) levert momenteel een bijdrage van <b>${contrib3}</b> aan de totale Z'-score. Dit is de hefboomcomponent: een verbetering van de operationele marge heeft het grootste effect op de eindscore.` },
+          { num: '3', col: 'gold', text: `Risico bij verslechtering: als de omzet daalt of kosten stijgen, kan de score in de rode zone terechtkomen. De grijze zone vereist actieve opvolging, niet louter afwachten.` },
+          { num: '4', col: 'gold', text: `Aanbeveling: focus op verbetering van X3 (winstgevendheid) en X1 (werkkapitaaloptimalisatie). Een stijging van X3 met 0.05 levert al +0.155 op de Z'-score (effect van gewicht 3.107).` },
+        ]);
+    } else {
+      warn('🟢 Veilige zone — Laag risico',
+        `Z'-score van ${r.zScore.toFixed(2)} wijst op een gezonde financiële positie (> 2.90). Het faillissementsrisico is laag conform het Altman-model.`,
+        'positief', `Z' = ${r.zScore.toFixed(2)}`, [
+          { num: '1', col: 'green', text: `Een score van <b>${r.zScore.toFixed(2)}</b> overschrijdt de veiligheidsdrempel van 2.9. De gewogen combinatie van werkkapitaal, ingehouden winst, EBIT, kapitaalstructuur en omzetefficiëntie is sterk.` },
+          { num: '2', col: 'green', text: `Financiële robuustheid: het bedrijf kan een tijdelijke omzetdaling of kostenstijging absorberen zonder onmiddellijk in de grijze zone te belanden. Dit geeft buffer voor investeringen en groei.` },
+        ]);
+    }
+  }
+
+  // ── Liquiditeit ──
+  if (isFinite(r.liqR) && r.liqR < 1.0) {
+    const tekort = r.vlottendeKT - r.schKTtot;
+    warn('🔴 Liquiditeitstekort — Vlottende activa dekken schulden niet',
+      `Liquiditeitsratio van ${r.liqR.toFixed(2)} — voor elke €1 kortetermijnschuld is slechts €${r.liqR.toFixed(2)} aan vlottende activa beschikbaar.`,
+      'kritisch', `Liq. ratio = ${r.liqR.toFixed(2)}`, [
+        { num: '1', col: 'red', text: `Een liquiditeitsratio onder 1.0 betekent dat de vlottende activa (${fmtEur(r.vlottendeKT)}) de kortetermijnverplichtingen (${fmtEur(r.schKTtot)}) <b>niet volledig dekken</b>. Het tekort bedraagt <b>${fmtEur(Math.abs(tekort))}</b>.` },
+        { num: '2', col: 'red', text: `Mechanisme van het risico: bij een onverwachte betaalverplichting (opeisbare schuld, leverancier die niet meer op krediet levert) heeft het bedrijf onvoldoende liquide middelen. Dit kan leiden tot betalingsstops en escalatie naar faillissement.` },
+        { num: '3', col: 'red', text: `Impact op Z'-score: negatief werkkapitaal verlaagt X1 direct. X1 bijdrage = ${isFinite(r.X1) ? (0.717*r.X1).toFixed(3) : '—'} — bij een negatieve bijdrage verzwakt de totale Z'-score significant.` },
+        { num: '4', col: 'gold', text: `Actie: versneld debiteurenbeheer (kortere betalingstermijnen), heronderhandeling van leverancierstermijnen, tijdelijke kredietlijn als overbrugging, of verkoop van niet-strategische activa.` },
+      ]);
+  } else if (isFinite(r.liqR) && r.liqR < 1.3) {
+    warn('🟡 Krappe liquiditeitsbuffer',
+      `Liquiditeitsratio van ${r.liqR.toFixed(2)} — net boven het minimum van 1.0, maar de buffer is beperkt. Een tegenvaller kan de situatie snel kritisch maken.`,
+      'hoog', `Liq. ratio = ${r.liqR.toFixed(2)}`, [
+        { num: '1', col: 'gold', text: `Met een ratio van ${r.liqR.toFixed(2)} is er een beperkte veiligheidsmarge van ${fmtEur(r.vlottendeKT - r.schKTtot)} boven de kortetermijnverplichtingen. Dit is kwetsbaar bij seizoensgebonden kaspieken of vertragingen in klantbetalingen.` },
+        { num: '2', col: 'gold', text: `Risicoscenario: als 10-15% van de vlottende activa onverwacht niet liquide blijkt (betwiste vordering, afschrijving voorraad), daalt de ratio onder 1.0 en ontstaat een liquiditeitstekort.` },
+        { num: '3', col: 'gold', text: `Aanbeveling: opbouw van een minimale cashreserve gelijkwaardig aan 30-60 dagen bedrijfskosten, en actieve monitoring van de debiteurenpositie.` },
+      ]);
+  }
+
+  if (isFinite(r.liqE) && r.liqE < 0.5) {
+    warn('🔴 Kritisch lage enge liquiditeit',
+      `Enge liquiditeitsratio van ${r.liqE.toFixed(2)} — zonder voorraden mee te rekenen zijn er onvoldoende liquide middelen voor kortetermijnverplichtingen.`,
+      'kritisch', `Eng. liq. = ${r.liqE.toFixed(2)}`, [
+        { num: '1', col: 'red', text: `De enge liquiditeitsratio sluit voorraden uit omdat die niet altijd snel verkoopbaar zijn. Met enkel vorderingen en geldmiddelen (${fmtEur(r.vorderKT + r.geldbel + r.liquide)}) tegenover schulden KT (${fmtEur(r.schKT)}) bedraagt de dekking slechts ${r.liqE.toFixed(2)}×.` },
+        { num: '2', col: 'red', text: `Dit betekent dat het bedrijf sterk afhankelijk is van het <b>snel kunnen verkopen van voorraden</b> om schulden te betalen. Als de markt vertraagt of voorraden moeilijk verkoopbaar zijn, ontstaan directe betalingsproblemen.` },
+      ]);
+  }
+
+  // ── Solvabiliteit ──
+  if (isFinite(r.solvPct) && r.solvPct < 10) {
+    warn('🔴 Kritisch lage solvabiliteit — Technisch kwetsbaar',
+      `Solvabiliteit van ${r.solvPct.toFixed(1)}% — het bedrijf is voor meer dan 90% gefinancierd met vreemd vermogen. Minimale buffer bij verliezen.`,
+      'kritisch', `Solv. = ${r.solvPct.toFixed(1)}%`, [
+        { num: '1', col: 'red', text: `Van de totale activa (${fmtEur(r.totActiva)}) is slechts ${fmtEur(r.eigenV)} (${r.solvPct.toFixed(1)}%) eigen vermogen. Dit betekent dat verlies van meer dan ${r.solvPct.toFixed(1)}% van de activawaarde het eigen vermogen volledig wegveegt.` },
+        { num: '2', col: 'red', text: `Mechanisme: bij een eenmalig verlies of afschrijving van beperkte omvang kan het eigen vermogen negatief worden (technische insolvabiliteit). Bankiers en schuldeisers beschouwen dit als alarmsignaal en kunnen kredieten opeisen.` },
+        { num: '3', col: 'red', text: `Impact op Z'-score: X4 = ${isFinite(r.X4) ? r.X4.toFixed(3) : '—'} (EV/schulden). Een lage X4 reduceert de Z'-score met ${isFinite(r.X4) ? (0.420*r.X4).toFixed(3) : '—'} punten — bij een gezonde X4 van 1.0 zou de bijdrage 0.420 zijn.` },
+        { num: '4', col: 'gold', text: `Aanbeveling: kapitaalversterking via nieuwe aandeelhouders, achterstelling van aandeelhoudersrekeningen, of winstinhouding over meerdere jaren. Vermijd verdere schuldopbouw.` },
+      ]);
+  } else if (isFinite(r.solvPct) && r.solvPct < 20) {
+    warn('🟡 Lage solvabiliteit',
+      `Solvabiliteit van ${r.solvPct.toFixed(1)}% is onder de referentiewaarde van 25%. Beperkte buffer voor tegenvallers.`,
+      'hoog', `Solv. = ${r.solvPct.toFixed(1)}%`, [
+        { num: '1', col: 'gold', text: `Bij een solvabiliteit van ${r.solvPct.toFixed(1)}% is de verhouding eigen/vreemd vermogen te scheef. Banken hanteren doorgaans een minimum van 20-25% als kredietvoorwaarde. Onder dit niveau wordt herfinanciering moeilijker.` },
+        { num: '2', col: 'gold', text: `Risico: bij rentestijging of kredietverkrapping kunnen herfinancieringskosten stijgen, wat de winstgevendheid verder drukt en de solvabiliteit verder verzwakt — een potentiële negatieve spiraal.` },
+      ]);
+  }
+
+  if (isFinite(r.schuldRatio) && r.schuldRatio > 80) {
+    warn('🔴 Hoge schuldenratio — Overmatige schuldfinanciering',
+      `${r.schuldRatio.toFixed(1)}% van de activa is gefinancierd met schulden (${fmtEur(r.totSchuld)}). Norm is onder 65%.`,
+      'kritisch', `Schuldenratio = ${r.schuldRatio.toFixed(1)}%`, [
+        { num: '1', col: 'red', text: `Schulden van ${fmtEur(r.totSchuld)} op activa van ${fmtEur(r.totActiva)} geeft een ratio van ${r.schuldRatio.toFixed(1)}%. Dit betekent dat bij een liquidatie van alle activa aan boekwaarde, er ${fmtEur(r.totSchuld - r.totActiva * (r.schuldRatio > 100 ? 1 : 1))} aan schulden onbetaald zou blijven.` },
+        { num: '2', col: 'red', text: `Elke euro omzetdaling of kostenstijging heeft een disproportioneel groot effect op de winstmarge omdat de vaste financiерingskosten (rente, aflossingen) niet meedalen. Dit is het "leverage-risico".` },
+        { num: '3', col: 'gold', text: `Aanbeveling: schuldaflossingsplan opstellen, geen nieuwe schulden aangaan tenzij voor directe productiegroei, en onderzoek of leveranciersschuld heronderhandeld kan worden naar langere looptijden.` },
+      ]);
+  } else if (isFinite(r.schuldRatio) && r.schuldRatio > 70) {
+    warn('🟡 Verhoogde schuldenratio',
+      `Schuldenratio van ${r.schuldRatio.toFixed(1)}% overschrijdt de norm van 65%. Financieel risico neemt toe.`,
+      'hoog', `Schuldenratio = ${r.schuldRatio.toFixed(1)}%`, [
+        { num: '1', col: 'gold', text: `Een schuldenratio van ${r.schuldRatio.toFixed(1)}% is nog aanvaardbaar maar overschrijdt de norm. Bij een rentestijging van 1% op ${fmtEur(r.totSchuld)} schulden stijgen de financieringskosten met ${fmtEur(r.totSchuld * 0.01)} per jaar — direct ten koste van de winstmarge.` },
+      ]);
+  }
+
+  // ── EBIT / Winst ──
+  if (isFinite(r.ebit) && r.ebit < 0) {
+    const x3contrib = isFinite(r.X3) ? (3.107 * r.X3).toFixed(3) : '—';
+    warn('🔴 Negatief EBIT — Bedrijfsactiviteit genereert verlies',
+      `Bedrijfsresultaat vóór interest en belastingen (EBIT) is ${fmtEur(r.ebit)}. De kernactiviteit kost meer dan ze opbrengt.`,
+      'kritisch', `EBIT = ${fmtEur(r.ebit)}`, [
+        { num: '1', col: 'red', text: `EBIT is het meest directe meetpunt van operationele gezondheid: het meet of de kernactiviteit, los van financiering, rendabel is. Een negatieve EBIT van ${fmtEur(r.ebit)} betekent dat vóór interest en belastingen al verlies wordt geleden.` },
+        { num: '2', col: 'red', text: `Zwaarste impact op Z'-score via X3 (gewicht 3.107): bijdrage = <b>${x3contrib}</b>. Dit is de component met het grootste gewicht in het Altman-model. Een negatieve X3 kan de Z'-score met meer dan 0.3–0.5 punten verlagen.` },
+        { num: '3', col: 'red', text: `Cascade-effect: negatief EBIT → negatief nettoresultaat → daling retained earnings (X2) → daling eigen vermogen (X4). Een aanhoudend negatief EBIT ondermijnt dus meerdere Z'-componenten tegelijk.` },
+        { num: '4', col: 'gold', text: `Aanbeveling: analyse van welke producten/diensten/afdelingen verlieslatend zijn. Overweeg: prijsverhoging, kostenreductie (code 60, 61, 62), uitbesteding van verlieslatende activiteiten, of strategische heroriëntatie.` },
+      ]);
+  }
+
+  if (isFinite(r.nettowinst) && r.nettowinst < 0 && !(isFinite(r.ebit) && r.ebit < 0)) {
+    warn('🟡 Nettoverlies ondanks positief EBIT',
+      `Nettoresultaat is negatief (${fmtEur(r.nettowinst)}) terwijl EBIT positief is. Het verlies wordt veroorzaakt door financiële kosten of uitzonderlijke lasten.`,
+      'hoog', `Nettowinst = ${fmtEur(r.nettowinst)}`, [
+        { num: '1', col: 'gold', text: `Het verschil tussen EBIT (${fmtEur(r.ebit)}) en nettowinst (${fmtEur(r.nettowinst)}) bedraagt ${fmtEur(r.ebit - r.nettowinst)}. Dit verlies zit in financiële kosten (interest), belastingen of uitzonderlijke lasten — niet in de kernactiviteit.` },
+        { num: '2', col: 'gold', text: `Hoewel de kernactiviteit winstgevend is, leidt de schuldenlast tot kapitaalvernietiging. De retained earnings (X2) dalen elk jaar met het nettoverlies, wat de Z'-score op lange termijn verzwakt.` },
+      ]);
+  } else if (isFinite(r.nettowinst) && r.nettowinst < 0) {
+    warn('🔴 Nettoverlies',
+      `Nettoresultaat is ${fmtEur(r.nettowinst)}. Kapitaalvernietiging voor aandeelhouders en directe daling van retained earnings.`,
+      'kritisch', `Nettowinst = ${fmtEur(r.nettowinst)}`, [
+        { num: '1', col: 'red', text: `Elk jaar nettoverlies verlaagt de retained earnings (code 14) en dus X2 in de Z'-score. Na meerdere verliesjaren kan het eigen vermogen negatief worden, wat X4 sterk verzwakt.` },
+      ]);
+  }
+
+  if (isFinite(r.eigenV) && r.eigenV < 0) {
+    warn('🔴 Negatief eigen vermogen — Technische insolvabiliteit',
+      `Eigen vermogen is ${fmtEur(r.eigenV)}. Gecumuleerde verliezen hebben het volgestort kapitaal overtroffen.`,
+      'kritisch', `EV = ${fmtEur(r.eigenV)}`, [
+        { num: '1', col: 'red', text: `Negatief eigen vermogen (${fmtEur(r.eigenV)}) betekent dat alle schulden (${fmtEur(r.totSchuld)}) samen de activa (${fmtEur(r.totActiva)}) overtreffen. In geval van liquidatie blijven schuldeisers met verlies achter.` },
+        { num: '2', col: 'red', text: `X4 = EV/schulden = ${isFinite(r.X4)?r.X4.toFixed(3):'—'} is negatief. Dit maakt de bijdrage van X4 aan de Z'-score negatief, wat de totaalscore sterk verlaagt. Banken weigeren doorgaans krediet aan bedrijven met negatief eigen vermogen.` },
+        { num: '3', col: 'red', text: `Wettelijk: in België kan een negatief netto actief (eigen vermogen < 0) de raad van bestuur verplichten een buitengewone algemene vergadering bijeen te roepen (art. 7:228 WVV). Inactiviteit kan leiden tot persoonlijke aansprakelijkheid van bestuurders.` },
+      ]);
+  }
+
+  // ── EBITDA negatief ──
+  if (isFinite(r.ebitda) && r.ebitda <= 0 && isFinite(r.ebit)) {
+    warn('🔴 Negatieve EBITDA — Geen operationele cashgeneratie',
+      `EBITDA van ${fmtEur(r.ebitda)} is negatief of nul. Zelfs vóór afschrijvingen genereert de onderneming geen positieve cashflow uit de bedrijfsactiviteit.`,
+      'kritisch', `EBITDA = ${fmtEur(r.ebitda)}`, [
+        { num: '1', col: 'red', text: `EBITDA = EBIT (${fmtEur(r.ebit)}) + Afschrijvingen (${fmtEur(r.afs)}) = ${fmtEur(r.ebitda)}. Een negatieve EBITDA betekent dat de bedrijfsactiviteit structureel meer kost dan ze opbrengt, ook zonder rekening te houden met investeringskosten.` },
+        { num: '2', col: 'red', text: `De schulddelgingsindicator (schulden/EBITDA) kan bij negatieve EBITDA niet zinvol worden berekend. In de praktijk betekent dit dat schuldaflossing enkel mogelijk is via activaverkoop of externe herfinanciering — niet via operationele cashflow.` },
+        { num: '3', col: 'gold', text: `Dringende actie vereist: onderzoek structurele kostenreductie, prijsverhoging, of stopzetting van verlieslatende activiteiten. Zoek professioneel advies over herstructurering.` },
+      ]);
+  }
+
+  // ── Interest ──
+  if (isFinite(r.interestDek) && r.interestDek < 1.0) {
+    warn('🔴 EBIT dekt financiële kosten niet',
+      `Interestdekkingsgraad van ${r.interestDek.toFixed(2)}× — het bedrijfsresultaat volstaat niet om de financiële lasten te betalen.`,
+      'kritisch', `Dek. = ${r.interestDek.toFixed(2)}×`, [
+        { num: '1', col: 'red', text: `EBIT (${fmtEur(r.ebit)}) is kleiner dan de financiële kosten (${fmtEur(r.c65)}). Dit betekent dat zelfs vóór belastingen het bedrijf zijn rentelasten niet uit operationele winst kan betalen. Het tekort moet worden gefinancierd via kasreserves of nieuwe schulden.` },
+        { num: '2', col: 'red', text: `Spiraalrisico: nieuwe schulden om rentelasten te betalen verhogen de totale schuldenlast, wat de volgende rentelast vergroot — een klassieke schuldspiraal die tot faillissement leidt als de trend niet doorbroken wordt.` },
+        { num: '3', col: 'gold', text: `Prioriteit: heronderhandeling van de schuldstructuur (langere looptijden, renteverlaging), zoeken naar alternatieve financieringsvormen (equity, subsidies), of drastische kostenreductie om EBIT te verbeteren.` },
+      ]);
+  } else if (isFinite(r.interestDek) && r.interestDek < 2.0) {
+    warn('🟡 Lage interestdekking — Kwetsbaar voor rentestijging',
+      `Interestdekkingsgraad van ${r.interestDek.toFixed(2)}× is krap. Elke omzetdaling of rentestijging kan de dekking onder 1.0 brengen.`,
+      'hoog', `Dek. = ${r.interestDek.toFixed(2)}×`, [
+        { num: '1', col: 'gold', text: `Met een dekkingsgraad van ${r.interestDek.toFixed(2)}× is er slechts een beperkte veiligheidsmarge. Als de financiële kosten stijgen met ${((1 - 1/r.interestDek)*100).toFixed(0)}% of de EBIT daalt met ${((1 - 1/r.interestDek)*100).toFixed(0)}%, daalt de dekking onder 1.0.` },
+        { num: '2', col: 'gold', text: `Aanbeveling: schuldaflossing versnellen waar mogelijk om de financiële kostenbase te verlagen, en rentevaste contracten overwegen bij variabele leningen.` },
+      ]);
+  }
+
+  // ── Werkkapitaal ──
+  if (isFinite(r.werkkapitaal) && r.werkkapitaal < 0) {
+    warn('🟡 Negatief werkkapitaal',
+      `Werkkapitaal van ${fmtEur(r.werkkapitaal)} — kortetermijnschulden overtreffen de vlottende activa.`,
+      'hoog', `WK = ${fmtEur(r.werkkapitaal)}`, [
+        { num: '1', col: 'gold', text: `Werkkapitaal = vlottende activa KT (${fmtEur(r.vlottendeKT)}) − alle KT schulden (${fmtEur(r.schKTtot)}) = ${fmtEur(r.werkkapitaal)}. Dit maakt X1 in de Z'-score negatief (bijdrage: ${isFinite(r.X1)?(0.717*r.X1).toFixed(3):'—'}), wat de totaalscore verzwakt.` },
+        { num: '2', col: 'gold', text: `Negatief werkkapitaal is niet altijd fataal: sommige bedrijfsmodellen (supermarkten, e-commerce) werken structureel met negatief werkkapitaal doordat klanten contant betalen maar leveranciers op krediet. Beoordeel dit in de context van het bedrijfsmodel.` },
+        { num: '3', col: 'gold', text: `Actie: analyseer de betalingstermijnen van klanten vs. leveranciers. Verlenging van leverancierstermijnen of verkorting van klantentermijnen kan het werkkapitaal snel verbeteren zonder externe financiering.` },
+      ]);
+  }
+
+  // ── ROE niet beschikbaar bij negatief EV ──
+  if (isFinite(r.eigenV) && r.eigenV <= 0 && !(isFinite(r.eigenV) && r.eigenV < 0)) {
+    // eigenV = 0 edge case
+    warn('🟡 Eigen vermogen is nul',
+      'Eigen vermogen is gelijk aan nul. ROE en solvabiliteitsratio zijn niet berekend.',
+      'hoog', 'EV = 0', [
+        { num: '1', col: 'gold', text: 'Eigen vermogen van nul betekent dat alle activa volledig gefinancierd zijn met schulden. Elke verdere verslechtering resulteert in negatief eigen vermogen.' },
+      ]);
+  }
+
+  // ── Positieve signalen ──
+  if (isFinite(r.zScore) && r.zScore > 4.0) {
+    warn('🟢 Uitstekende financiële positie',
+      `Z'-score van ${r.zScore.toFixed(2)} is ver boven de veiligheidsdrempel van 2.9. Sterke weerbaarheid tegen financiële schokken.`,
+      'positief', `Z' = ${r.zScore.toFixed(2)}`, [
+        { num: '1', col: 'green', text: `Een Z'-score van ${r.zScore.toFixed(2)} plaatst het bedrijf ver in de veilige zone. Alle vijf componenten dragen positief bij: werkkapitaal, winsthistoriek, operationele rentabiliteit, kapitaalstructuur en activabenutting zijn structureel sterk.` },
+        { num: '2', col: 'green', text: `Deze positie biedt gunstige onderhandelingsposities: lagere rentevoeten bij banken, betere betalingsvoorwaarden bij leveranciers, en aantrekkelijkheid voor investeerders.` },
+      ]);
+  }
+  if (isFinite(r.solvPct) && r.solvPct > 50) {
+    warn('🟢 Sterke solvabiliteit',
+      `Meer dan de helft van de activa is gefinancierd met eigen vermogen (${r.solvPct.toFixed(1)}%). Robuuste en onafhankelijke balansstructuur.`,
+      'positief', `Solv. = ${r.solvPct.toFixed(1)}%`, [
+        { num: '1', col: 'green', text: `Een solvabiliteit van ${r.solvPct.toFixed(1)}% betekent dat het bedrijf zijn activawaarde met meer dan de helft kan zien dalen voordat schuldeisers risico lopen. Dit geeft aanzienlijke financiële flexibiliteit.` },
+        { num: '2', col: 'green', text: `Hoge solvabiliteit = lage X4-bijdrage aan het risico en goede toegang tot extra financiering indien nodig voor groei of overnames. Het bedrijf kan profiteren van gunstige hefboomwerking bij uitbreiding.` },
+      ]);
+  }
+
+  const list = document.getElementById('warning-list');
+  if (!warnings.length) {
+    list.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Geen significante waarschuwingen gedetecteerd.</div>';
+    return;
+  }
+  const order = {kritisch:0, hoog:1, positief:2};
+  warnings.sort((a,b) => (order[a.sev]||9) - (order[b.sev]||9));
+
+  list.innerHTML = warnings.map(w => {
+    const stepsHtml = w.steps.length ? `
+      <div class="warning-redenering">
+        <div class="warning-redenering-title">Redenering &amp; impact</div>
+        <div class="warning-redenering-steps">
+          ${w.steps.map(s => `
+            <div class="warning-step">
+              <div class="warning-step-num ${s.col}">${s.num}</div>
+              <div>${s.text}</div>
+            </div>`).join('')}
+        </div>
+      </div>` : '';
+    return `
+    <div class="warning-card sev-${w.sev}">
+      <div class="warning-body">
+        <div class="warning-title">${w.title}</div>
+        <div class="warning-desc">${w.desc}</div>
+        <span class="warning-tag">${w.tag}</span>
+        ${stepsHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══ COMPONENTS TABLE ══════════════════════════════════════════════════════════
+function renderComponents(r) {
+  const comps = [
+    {name:'X1', label:'Werkkapitaal / Totale activa', codes:'(29/58 − 42/48 − 492/3) ÷ 20/58', weight:0.717, val:r.X1},
+    {name:'X2', label:'Retained earnings (11+13+14) / Totale activa', codes:'(11+13+14) ÷ 20/58', weight:0.847, val:r.X2},
+    {name:'X3', label:'EBIT / Totale activa', codes:'9901 ÷ 20/58', weight:3.107, val:r.X3},
+    {name:'X4', label:'Boekwaarde EV / Totale schulden', codes:'10/15 ÷ 17/49', weight:0.420, val:r.X4},
+    {name:'X5', label:'Omzet / Totale activa', codes:'70 ÷ 20/58', weight:0.998, val:r.X5},
+  ];
+
+  let html = '';
+  let totalContrib = 0;
+  comps.forEach(c => {
+    const contrib = isFinite(c.val) ? c.weight * c.val : NaN;
+    if (isFinite(contrib)) totalContrib += contrib;
+    const pct = isFinite(c.val) && isFinite(r.zScore) && r.zScore !== 0 ? Math.abs(contrib/r.zScore)*100 : 0;
+    const col = isFinite(c.val) && c.val > 0 ? '#2e7d32' : '#c62828';
+    const barHtml = `<div class="xcomp-bar"><div class="xcomp-bar-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div>`;
+    html += `<tr>
+      <td><span class="xcomp-name">${c.name}</span><span class="xcomp-code">${c.codes}</span><br><span style="font-size:11px;color:var(--muted);font-weight:300">${c.label}</span></td>
+      <td class="xcomp-formula">${c.weight} × Xn</td>
+      <td class="xcomp-weight">${c.weight}</td>
+      <td>${isFinite(c.val)?c.val.toFixed(4):'—'}</td>
+      <td>${barHtml}<span class="xcomp-contrib" style="color:${col}">${isFinite(contrib)?contrib.toFixed(4):'—'}</span></td>
+    </tr>`;
+  });
+  html += `<tr class="xcomp-total">
+    <td colspan="2"><b>Z'-SCORE TOTAAL</b></td>
+    <td>—</td><td>—</td>
+    <td style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:16px">${isFinite(r.zScore)?r.zScore.toFixed(4):'—'}</td>
+  </tr>`;
+  document.getElementById('comp-tbody').innerHTML = html;
+  document.getElementById('comp-codes').style.display = 'block';
+}
+
+// ══ FILE UPLOAD ════════════════════════════════════════════════════════════════
+document.getElementById('file').addEventListener('change', function(e) {
+  const file = e.target.files[0]; if (!file) return;
+  if (!file.name.match(/\.(xlsx|xls|csv)$/i)) { showToast('Gebruik .xlsx, .xls of .csv'); e.target.value=''; return; }
+  document.getElementById('file-name').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      const wb = XLSX.read(new Uint8Array(evt.target.result), {type:'array'});
+      _workbook = wb;
+      buildExcelModal(wb, file.name);
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      const {v, jaar, entityName} = parseRows(rows);
+      document.getElementById('meta-jaar').textContent = jaar || '—';
+      if (entityName) {
+        document.getElementById('entity-name').textContent = entityName;
+        document.getElementById('entity-name-wrap').style.display = 'block';
+      } else {
+        document.getElementById('entity-name-wrap').style.display = 'none';
+      }
+      const r = extractVars(v);
+      // Update meta pills
+      document.getElementById('meta-omzet').textContent = fmtEur(r.omzet);
+      document.getElementById('meta-activa').textContent = fmtEur(r.totActiva);
+      // Update ctx strip
+      document.getElementById('ctx-omzet').textContent = fmtEur(r.omzet);
+      document.getElementById('ctx-activa').textContent = fmtEur(r.totActiva);
+      const evEl = document.getElementById('ctx-ev');
+      evEl.textContent = fmtEur(r.eigenV);
+      evEl.className = 'ctx-card-value' + (r.eigenV < 0 ? ' red' : '');
+      document.getElementById('ctx-schuld').textContent = fmtEur(r.totSchuld);
+      const wkEl = document.getElementById('ctx-wk');
+      wkEl.textContent = fmtEur(r.werkkapitaal);
+      wkEl.className = 'ctx-card-value' + (r.werkkapitaal < 0 ? ' red' : '');
+      const ebitEl = document.getElementById('ctx-ebit');
+      ebitEl.textContent = fmtEur(r.ebit);
+      ebitEl.className = 'ctx-card-value' + (r.ebit < 0 ? ' red' : '');
+      const winstEl = document.getElementById('ctx-winst');
+      winstEl.textContent = fmtEur(r.nettowinst);
+      winstEl.className = 'ctx-card-value' + (r.nettowinst < 0 ? ' red' : '');
+      document.getElementById('ctx-reserves').textContent = fmtEur(r.retainedEarnings);
+
+      renderAll(r);
+      document.getElementById('btn-excel').classList.add('visible');
+      document.getElementById('btn-pdf').classList.add('visible');
+      document.getElementById('welcome-card').style.display = 'none';
+      window._pdfData = {r, jaar, entityName, fname: file.name.replace(/\.[^.]+$/,'')};
+    } catch(err) { showToast('Fout bij inlezen: ' + err.message); console.error(err); }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// ══ EXCEL MODAL ════════════════════════════════════════════════════════════════
+function buildExcelModal(wb, filename) {
+  _workbook = wb;
+  document.getElementById('modal-filename').textContent = filename;
+  const tabs = document.getElementById('sheet-tabs'); tabs.innerHTML = '';
+  wb.SheetNames.forEach((name,i) => {
+    const tab = document.createElement('div');
+    tab.className = 'sheet-tab' + (i===0?' active':'');
+    tab.textContent = name;
+    tab.onclick = () => { showSheet(i); document.querySelectorAll('.sheet-tab').forEach((t,j)=>t.classList.toggle('active',j===i)); };
+    tabs.appendChild(tab);
+  });
+  showSheet(0);
+}
+function showSheet(idx) {
+  const sheet = _workbook.Sheets[_workbook.SheetNames[idx]];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+  const colCount = rows.length ? Math.max(...rows.map(r=>r.length)) : 0;
+  let thead = '<thead><tr><th>#</th>';
+  for (let c=0;c<colCount;c++) thead += `<th>${colLet(c)}</th>`;
+  thead += '</tr></thead>';
+  let tbody = '<tbody>';
+  rows.forEach((row,ri) => {
+    tbody += `<tr><td>${ri+1}</td>`;
+    for (let c=0;c<colCount;c++) {
+      const val = row[c]!==undefined?row[c]:'';
+      const isN = typeof val==='number';
+      tbody += `<td${isN?' class="num"':''}>${isN?val.toLocaleString('nl-BE',{maximumFractionDigits:2}):escH(String(val))}</td>`;
+    }
+    tbody += '</tr>';
+  });
+  tbody += '</tbody>';
+  document.getElementById('modal-table').innerHTML = thead+tbody;
+  document.getElementById('modal-info').textContent = `${rows.length} rijen · ${colCount} kolommen`;
+  document.getElementById('modal-filter').textContent = '';
+  document.getElementById('modal-search').value = '';
+}
+function filterTable(q) {
+  const needle = q.toLowerCase().trim(); let vis=0;
+  document.querySelectorAll('#modal-table tbody tr').forEach(tr => {
+    const show = !needle || tr.textContent.toLowerCase().includes(needle);
+    tr.classList.toggle('row-hidden',!show); if(show) vis++;
+  });
+  document.getElementById('modal-filter').textContent = needle?`${vis} resultaten`:'';
+}
+function colLet(n){let s='';n++;while(n>0){s=String.fromCharCode(64+(n%26||26))+s;n=Math.floor((n-1)/26);}return s;}
+function escH(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function openExcelModal(){document.getElementById('excel-modal').classList.add('open');document.body.style.overflow='hidden';}
+function closeExcelModal(e){if(e&&e.target!==document.getElementById('excel-modal'))return;document.getElementById('excel-modal').classList.remove('open');document.body.style.overflow='';}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.getElementById('excel-modal').classList.remove('open');document.body.style.overflow='';}});
+
+// ══ PDF EXPORT ════════════════════════════════════════════════════════════════
+function exportPDF() {
+  if (!window._pdfData) { showToast('Laad eerst een bestand.'); return; }
+  const {r, jaar, entityName, fname} = window._pdfData;
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+  const W=210, M=16, CW=W-2*M;
+  const entity = entityName || fname;
+
+  function setF(c){doc.setFillColor(c[0],c[1],c[2]);}
+  function setT(c){doc.setTextColor(c[0],c[1],c[2]);}
+  function B(s=10){doc.setFont('helvetica','bold');doc.setFontSize(s);}
+  function N(s=10){doc.setFont('helvetica','normal');doc.setFontSize(s);}
+
+  const ACC=[26,26,46], GOLD=[184,150,62], WHITE=[255,255,255], BG=[242,241,237];
+  const GREEN=[46,125,50], AMBER=[230,81,0], RED=[198,40,40], MUT=[138,136,128];
+
+  // Zone color
+  const z = r.zScore;
+  const zCol = z > 2.9 ? GREEN : z >= 1.23 ? AMBER : RED;
+  const zLabel = z > 2.9 ? 'VEILIGE ZONE' : z >= 1.23 ? 'GRIJZE ZONE' : 'HOOG RISICO';
+  let y = 0;
+
+  // ── COVER ──
+  setF(ACC); doc.rect(0,0,W,48,'F');
+  B(22); setT(WHITE); doc.text('FinRisk — Faillissementsrisico', M, 17);
+  N(11); setT(GOLD); doc.text(entity, M, 26);
+  N(9); setT([180,180,180]);
+  doc.text('Referentie: ' + (jaar||'—'), M, 33);
+  doc.text('Datum: ' + new Date().toLocaleDateString('nl-BE'), W-M, 33, {align:'right'});
+  doc.text('Model: Altman Z\'-score (niet-beursgenoteerd, 1983)', M, 39);
+  y = 56;
+
+  // ── Z'-SCORE BANNER ──
+  setF(zCol); doc.roundedRect(M,y,CW,28,2,2,'F');
+  B(28); setT(WHITE); doc.text(isFinite(z)?z.toFixed(2):'—', M+14, y+18);
+  N(8); setT(WHITE); doc.text("Z'-SCORE", M+14, y+24);
+  B(11); setT(WHITE); doc.text(zLabel, M+52, y+14);
+  N(9); setT([220,220,220]);
+  const zVerdict = z > 2.9 ? 'Laag faillissementsrisico — gezonde financiële structuur.'
+    : z >= 1.23 ? 'Verhoogd risico — grijze zone. Opvolging aanbevolen.'
+    : 'Hoog faillissementsrisico. Dringende maatregelen vereist.';
+  doc.text(zVerdict, M+52, y+22, {maxWidth: CW-52});
+  y += 36;
+
+  // ── Z'-COMPONENTEN ──
+  B(9); setT(MUT); doc.text("ALTMAN Z'-COMPONENTEN", M, y); y+=3;
+  setF(BG); doc.rect(M,y,CW,.3,'F'); y+=4;
+  setF(ACC); doc.rect(M,y,CW,7,'F');
+  B(7); setT(WHITE);
+  doc.text('Component', M+3, y+4.5);
+  doc.text('Gewicht', M+65, y+4.5);
+  doc.text('Waarde', M+90, y+4.5);
+  doc.text('Bijdrage', M+115, y+4.5);
+  doc.text('NBB-codes', W-M, y+4.5, {align:'right'});
+  y+=7;
+  const compRows=[
+    ['X1 — Werkkapitaal / Activa','0.717',r.X1,0.717*r.X1,'(29/58−42/48−492/3)÷20/58'],
+    ['X2 — Retained earnings / Activa','0.847',r.X2,0.847*r.X2,'(11+13+14)÷20/58'],
+    ['X3 — EBIT / Activa','3.107',r.X3,3.107*r.X3,'9901÷20/58'],
+    ['X4 — EV / Schulden','0.420',r.X4,0.420*r.X4,'10/15÷17/49'],
+    ['X5 — Omzet / Activa','0.998',r.X5,0.998*r.X5,'70÷20/58'],
+  ];
+  compRows.forEach(([lbl,w,xn,contrib,codes],i)=>{
+    if(y>272){doc.addPage();y=18;}
+    const bg=i%2===0?WHITE:BG;
+    setF(bg); doc.rect(M,y,CW,9,'F');
+    N(8); setT(ACC); doc.text(lbl, M+3, y+5.5, {maxWidth:56});
+    N(8); setT(MUT); doc.text(w, M+65, y+5.5);
+    const xCol=isFinite(xn)&&xn>=0?GREEN:RED;
+    B(8); setT(xCol); doc.text(isFinite(xn)?xn.toFixed(4):'—', M+90, y+5.5);
+    B(8); setT(isFinite(contrib)&&contrib>=0?GREEN:RED); doc.text(isFinite(contrib)?contrib.toFixed(4):'—', M+115, y+5.5);
+    N(7); setT([160,160,160]); doc.text(codes, W-M, y+5.5, {align:'right'});
+    y+=9;
+  });
+  if(y>272){doc.addPage();y=18;}
+  setF(ACC); doc.rect(M,y,CW,8,'F');
+  B(9); setT(GOLD); doc.text("Z'-SCORE TOTAAL", M+3, y+5.5);
+  B(10); setT(zCol); doc.text(isFinite(z)?z.toFixed(4):'—', W-M, y+5.5, {align:'right'});
+  y+=14;
+
+  // ── KERNCIJFERS ──
+  if(y>240){doc.addPage();y=18;}
+  B(9); setT(MUT); doc.text('KERNCIJFERS', M, y); y+=3;
+  setF(BG); doc.rect(M,y,CW,.3,'F'); y+=4;
+  const kc=[
+    ['Omzet (70)',fmtEur(r.omzet)],['Totale activa (20/58)',fmtEur(r.totActiva)],
+    ['Eigen vermogen (10/15)',fmtEur(r.eigenV)],['Totale schulden (17/49)',fmtEur(r.totSchuld)],
+    ['Werkkapitaal',fmtEur(r.werkkapitaal)],['EBIT (9901)',fmtEur(r.ebit)],
+    ['Nettowinst (9904)',fmtEur(r.nettowinst)],['Reserves (14)',fmtEur(r.reserves)],
+  ];
+  const cw2=CW/4;
+  for(let i=0;i<kc.length;i++){
+    if(y>272){doc.addPage();y=18;}
+    const col=i%4,row=Math.floor(i/4);
+    if(col===0&&row>0) y+=12;
+    const cx=M+col*cw2;
+    setF(ACC); doc.roundedRect(cx,y,cw2-2,11,1,1,'F');
+    N(7); setT([120,120,120]); doc.text(kc[i][0],cx+3,y+5);
+    B(8.5); setT(GOLD); doc.text(kc[i][1],cx+3,y+9.5,{maxWidth:cw2-6});
+  }
+  y+=16;
+
+  // ── RATIO TABLE ──
+  function addRatioTable(title, ratioIds, defs) {
+    if(y>252){doc.addPage();y=18;}
+    B(9); setT(MUT); doc.text(title.toUpperCase(), M, y); y+=3;
+    setF(MUT); doc.rect(M,y,CW,.3,'F'); y+=4;
+    setF(ACC); doc.rect(M,y,CW,6,'F');
+    B(7); setT(WHITE);
+    doc.text('Indicator', M+2, y+4.2);
+    doc.text('Waarde', M+88, y+4.2, {align:'right'});
+    doc.text('Referentie', M+118, y+4.2, {align:'right'});
+    doc.text('Beoordeling', M+140, y+4.2);
+    y+=6;
+    ratioIds.forEach((id,i)=>{
+      if(y>272){doc.addPage();y=18;}
+      const def=defs.find(d=>d.id===id); if(!def)return;
+      const val=def.val(r);
+      let level='nb';
+      if(isFinite(val)&&!isNaN(val)&&def.thresholds){
+        const thr=def.thresholds; let idx=4;
+        if(def.higherBetter){if(val>=thr[0])idx=0;else if(val>=thr[1])idx=1;else if(val>=thr[2])idx=2;else if(val>=thr[3])idx=3;}
+        else{if(val<=thr[0])idx=0;else if(val<=thr[1])idx=1;else if(val<=thr[2])idx=2;else if(val<=thr[3])idx=3;}
+        level=['uitstekend','goed','matig','zwak','slecht'][idx];
+      }
+      const lcol={uitstekend:GREEN,goed:GREEN,matig:[180,140,0],zwak:AMBER,slecht:RED,nb:MUT}[level];
+      const lbls={uitstekend:'Uitstekend',goed:'Goed',matig:'Matig',zwak:'Zwak',slecht:'Slecht',nb:'N/B'};
+      const bg=i%2===0?WHITE:BG;
+      setF(bg); doc.rect(M,y,CW,9,'F');
+      N(8); setT(ACC); doc.text(def.label.split('(')[0].trim(), M+2, y+5.5, {maxWidth:76});
+      const fmtV=def.valCls==='pct'?fmtPct(val):def.valCls==='x'?fmtX(val,1)+'×':isFinite(val)?val.toFixed(2):'—';
+      B(8); setT(lcol); doc.text(fmtV, M+88, y+5.5, {align:'right'});
+      const fmtN=def.norm!==null?(def.valCls==='pct'?def.norm+'%':def.valCls==='x'?def.norm+'×':def.norm.toFixed(2)):'—';
+      N(7); setT(MUT); doc.text((def.higherBetter?'>':'<')+' '+fmtN, M+118, y+5.5, {align:'right'});
+      setF(lcol); doc.roundedRect(M+122,y+1.8,20,5,1,1,'F');
+      B(6.5); setT(WHITE); doc.text(lbls[level],M+132,y+5.5,{align:'center'});
+      y+=9;
+    });
+    y+=6;
+  }
+  const defs = getRatioDefs(r);
+  addRatioTable("Liquiditeitsstress", ['liqR','liqE','cashRatio'], defs);
+  addRatioTable("Solvabiliteitsstress", ['solvPct','schuldRatio','debtCoverage','interestDek'], defs);
+  addRatioTable("Winststabiliteit", ['ebitMarge','nettomarge','ebitdaMarge','roe','roa'], defs);
+
+  // ── FOOTER ──
+  const totalPages=doc.internal.getNumberOfPages();
+  for(let p=1;p<=totalPages;p++){
+    doc.setPage(p);
+    setF(ACC); doc.rect(0,287,W,10,'F');
+    N(7); setT([140,140,140]);
+    doc.text('FinRisk — ' + entity + ' — Ref. ' + (jaar||'—'), M, 293);
+    doc.text('p.'+p+'/'+totalPages, W-M, 293, {align:'right'});
+  }
+  const safeName = entity.replace(/[^a-zA-Z0-9_\-]/g,'_').replace(/_+/g,'_').slice(0,40);
+  doc.save('finrisk_' + safeName + '_' + (jaar||'rapport') + '.pdf');
+  showToast('PDF geëxporteerd.');
+}
+
+</script>
+</body>
+</html>
